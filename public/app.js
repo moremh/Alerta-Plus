@@ -2176,149 +2176,391 @@ window.editSurvey = async function(id) {
 
 window.viewSurveyDetail = async function(id) {
   const user = getSession();
-  const res = await fetch('/api/surveys');
-  const data = await res.json();
 
-  const survey = data.surveys.find(s => s.id === id);
-
-  if (!survey) {
-    alert('Venta no encontrada');
+  if (!user) {
+    renderHome();
     return;
   }
 
-  renderAppShell({
-    user,
-    active: user.role === 'admin' ? 'centralSales' : 'mySales',
-    title: 'Detalle de Venta',
-    subtitle: 'Información completa de la venta seleccionada.',
-    extraActions: `
-      <button class="btn btn-secondary" id="backFromDetailBtn">Volver</button>
-      ${user.role === 'admin'
-        ? `<button class="btn btn-primary" onclick="changeSurveyStatus(${survey.id})">Cambiar Estado</button>`
-        : ''
-      }
-    `,
-    content: `
-      <div class="detail-grid-pro">
-        <div class="detail-main-pro">
-          <div class="detail-card-pro">
-            <h3>Datos del Cliente</h3>
-            <div class="detail-info-grid">
-              <div><span>Nombre</span><strong>${survey.holderName || '-'}</strong></div>
-              <div><span>DNI / CUIL</span><strong>${survey.cuil || '-'}</strong></div>
-              <div><span>Fecha de nacimiento</span><strong>${survey.birthDate || '-'}</strong></div>
-              <div><span>Teléfono</span><strong>${survey.phone1 || '-'}</strong></div>
-              <div><span>Email</span><strong>${survey.email || '-'}</strong></div>
-              <div><span>Vendedor</span><strong>${survey.sellerName || '-'}</strong></div>
-            </div>
-          </div>
+  try {
+    const res = await fetch('/api/surveys');
+    const data = await res.json();
 
-          <div class="detail-card-pro">
-            <h3>Ubicación</h3>
-            <div class="detail-info-grid">
-              <div><span>Dirección</span><strong>${survey.monitoringAddress || '-'}</strong></div>
-              <div><span>Entre calles</span><strong>${survey.betweenStreets || '-'}</strong></div>
-              <div><span>Barrio</span><strong>${survey.neighborhood || '-'}</strong></div>
-              <div><span>Ciudad</span><strong>${survey.city || '-'}</strong></div>
-              <div><span>Código Postal</span><strong>${survey.postalCode || '-'}</strong></div>
-            </div>
-          </div>
-
-          <div class="detail-card-pro">
-            <h3>Servicio Contratado</h3>
-            <div class="detail-info-grid">
-              <div><span>Equipo Principal</span><strong>${survey.equipment || '-'}</strong></div>
-              <div><span>Equipo Adicional</span><strong>${survey.additionalEquipment || '-'}</strong></div>
-              <div><span>Promoción</span><strong>${survey.bonus || '-'}</strong></div>
-              <div><span>Observaciones</span><strong>${survey.observations || '-'}</strong></div>
-            </div>
-          </div>
-
-          <div class="detail-card-pro">
-            <h3>Documentación</h3>
-            <div class="btn-row">
-              ${survey.dniFrontData
-                ? `<button class="btn btn-outline" onclick="viewImage('${encodeURIComponent(survey.dniFrontData)}')">DNI Frente</button>`
-                : `<span class="muted">Sin DNI frente</span>`
-              }
-
-              ${survey.dniBackData
-                ? `<button class="btn btn-outline" onclick="viewImage('${encodeURIComponent(survey.dniBackData)}')">DNI Dorso</button>`
-                : `<span class="muted">Sin DNI dorso</span>`
-              }
-            </div>
-          </div>
-
-          <div class="detail-card-pro">
-            <h3>Historial</h3>
-            <div class="timeline-pro">
-              <div class="timeline-item-pro done">
-                <div class="timeline-dot-pro"></div>
-                <div>
-                  <strong>Venta creada</strong>
-                  <div class="muted">${formatDateTime(survey.createdAt)}</div>
-                </div>
-              </div>
-
-              <div class="timeline-item-pro ${survey.status !== 'pending' ? 'done' : ''}">
-                <div class="timeline-dot-pro"></div>
-                <div>
-                  <strong>En revisión</strong>
-                  <div class="muted">Pendiente de validación por jefatura</div>
-                </div>
-              </div>
-
-              <div class="timeline-item-pro ${survey.status === 'confirmed' ? 'done' : ''}">
-                <div class="timeline-dot-pro"></div>
-                <div>
-                  <strong>Venta aprobada</strong>
-                  <div class="muted">${survey.status === 'confirmed' ? 'Aprobada por jefatura' : 'Todavía no aprobada'}</div>
-                </div>
-              </div>
-
-              <div class="timeline-item-pro ${survey.status === 'rejected' ? 'done rejected' : ''}">
-                <div class="timeline-dot-pro"></div>
-                <div>
-                  <strong>Venta rechazada</strong>
-                  <div class="muted">${survey.status === 'rejected' ? (survey.adminNotes || 'Rechazada por jefatura') : 'Sin rechazo'}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="detail-side-pro">
-          <div class="detail-card-pro">
-            <h3>Estado</h3>
-            <div style="margin:16px 0 20px 0;">
-              ${statusBadge(survey.status)}
-            </div>
-
-            <div class="detail-side-list">
-              <div class="summary-row"><span>Fecha de creación</span><strong>${formatDateTime(survey.createdAt)}</strong></div>
-              <div class="summary-row"><span>Última actualización</span><strong>${formatDateTime(survey.createdAt)}</strong></div>
-              <div class="summary-row"><span>Vendedor</span><strong>${survey.sellerName || '-'}</strong></div>
-            </div>
-          </div>
-
-          <div class="detail-card-pro">
-            <h3>Observaciones de Jefatura</h3>
-            <p class="muted" style="margin:0;">
-              ${survey.adminNotes || 'Sin observaciones registradas.'}
-            </p>
-          </div>
-        </div>
-      </div>
-    `
-  });
-
-  document.getElementById('backFromDetailBtn').onclick = () => {
-    if (user.role === 'admin') {
-      renderAdminSurveys();
-    } else {
-      renderSellerSurveys(user);
+    if (!res.ok) {
+      alert(data.error || 'No se pudo cargar la venta');
+      return;
     }
-  };
+
+    const survey = data.surveys.find(s => Number(s.id) === Number(id));
+
+    if (!survey) {
+      alert('Venta no encontrada');
+      return;
+    }
+
+    renderAppShell({
+      user,
+      active: user.role === 'admin' ? 'centralSales' : 'mySales',
+      title: 'Detalle de Venta',
+      subtitle: 'Información completa de la venta seleccionada.',
+      extraActions: `
+        <button class="btn btn-secondary" id="backFromDetailBtn">
+          Volver
+        </button>
+
+        ${
+          user.role === 'admin'
+            ? `
+              <button
+                class="btn btn-primary"
+                onclick="changeSurveyStatus(${survey.id})"
+              >
+                Cambiar Estado
+              </button>
+            `
+            : ''
+        }
+      `,
+      content: `
+        <div class="detail-grid-pro">
+          <div class="detail-main-pro">
+
+            <!-- DATOS DEL CLIENTE -->
+            <div class="detail-card-pro">
+              <h3>Datos del Cliente</h3>
+
+              <div class="detail-info-grid">
+                <div>
+                  <span>Nombre y apellido</span>
+                  <strong>${survey.holderName || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>CUIT / CUIL</span>
+                  <strong>${survey.cuil || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Fecha de nacimiento</span>
+                  <strong>${survey.birthDate ? formatDate(survey.birthDate) : '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Teléfono titular</span>
+                  <strong>${survey.phone1 || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Correo electrónico</span>
+                  <strong>${survey.email || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Vendedor</span>
+                  <strong>${survey.sellerName || '-'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- CONTACTOS ADICIONALES -->
+            <div class="detail-card-pro">
+              <h3>Contactos adicionales</h3>
+
+              <div class="detail-info-grid">
+                <div>
+                  <span>Nombre del contacto 2</span>
+                  <strong>${survey.contact2Name || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Teléfono del contacto 2</span>
+                  <strong>${survey.phone2 || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Parentesco del contacto 2</span>
+                  <strong>${survey.contact2Relationship || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Nombre del contacto 3</span>
+                  <strong>${survey.contact3Name || 'No informado'}</strong>
+                </div>
+
+                <div>
+                  <span>Teléfono del contacto 3</span>
+                  <strong>${survey.phone3 || 'No informado'}</strong>
+                </div>
+
+                <div>
+                  <span>Parentesco del contacto 3</span>
+                  <strong>${survey.contact3Relationship || 'No informado'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- UBICACIÓN -->
+            <div class="detail-card-pro">
+              <h3>Ubicación</h3>
+
+              <div class="detail-info-grid">
+                <div>
+                  <span>Domicilio</span>
+                  <strong>${survey.monitoringAddress || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Entre calles</span>
+                  <strong>${survey.betweenStreets || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Barrio</span>
+                  <strong>${survey.neighborhood || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Ciudad</span>
+                  <strong>${survey.city || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Código Postal</span>
+                  <strong>${survey.postalCode || '-'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- SERVICIO -->
+            <div class="detail-card-pro">
+              <h3>Servicio Contratado</h3>
+
+              <div class="detail-info-grid">
+                <div>
+                  <span>Equipo principal</span>
+                  <strong>${survey.equipment || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Equipo adicional</span>
+                  <strong>${survey.additionalEquipment || 'Sin equipo adicional'}</strong>
+                </div>
+
+                <div>
+                  <span>Promoción / Abono</span>
+                  <strong>${survey.bonus || '-'}</strong>
+                </div>
+
+                <div>
+                  <span>Observaciones del vendedor</span>
+                  <strong>${survey.observations || 'Sin observaciones'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- DOCUMENTACIÓN -->
+            <div class="detail-card-pro">
+              <h3>Documentación</h3>
+
+              <div class="detail-info-grid" style="margin-bottom:16px;">
+                <div>
+                  <span>Archivo DNI frente</span>
+                  <strong>${survey.dniFrontName || 'No cargado'}</strong>
+                </div>
+
+                <div>
+                  <span>Archivo DNI dorso</span>
+                  <strong>${survey.dniBackName || 'No cargado'}</strong>
+                </div>
+              </div>
+
+              <div class="btn-row">
+                ${
+                  survey.dniFrontData
+                    ? `
+                      <button
+                        class="btn btn-outline"
+                        onclick="viewImage('${encodeURIComponent(survey.dniFrontData)}')"
+                      >
+                        Ver DNI Frente
+                      </button>
+                    `
+                    : `<span class="muted">Sin DNI frente</span>`
+                }
+
+                ${
+                  survey.dniBackData
+                    ? `
+                      <button
+                        class="btn btn-outline"
+                        onclick="viewImage('${encodeURIComponent(survey.dniBackData)}')"
+                      >
+                        Ver DNI Dorso
+                      </button>
+                    `
+                    : `<span class="muted">Sin DNI dorso</span>`
+                }
+              </div>
+            </div>
+
+            <!-- HISTORIAL -->
+            <div class="detail-card-pro">
+              <h3>Historial</h3>
+
+              <div class="timeline-pro">
+                <div class="timeline-item-pro done">
+                  <div class="timeline-dot-pro"></div>
+
+                  <div>
+                    <strong>Venta creada</strong>
+                    <div class="muted">
+                      ${formatDateTime(survey.createdAt)}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="timeline-item-pro ${
+                  survey.status !== 'pending' ? 'done' : ''
+                }">
+                  <div class="timeline-dot-pro"></div>
+
+                  <div>
+                    <strong>En revisión</strong>
+                    <div class="muted">
+                      ${
+                        survey.status === 'pending'
+                          ? 'Pendiente de validación por jefatura'
+                          : 'La venta fue revisada por jefatura'
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                <div class="timeline-item-pro ${
+                  survey.status === 'confirmed' ? 'done' : ''
+                }">
+                  <div class="timeline-dot-pro"></div>
+
+                  <div>
+                    <strong>Venta aprobada</strong>
+                    <div class="muted">
+                      ${
+                        survey.status === 'confirmed'
+                          ? 'Aprobada por jefatura'
+                          : 'Todavía no aprobada'
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                <div class="timeline-item-pro ${
+                  survey.status === 'rejected' ? 'done rejected' : ''
+                }">
+                  <div class="timeline-dot-pro"></div>
+
+                  <div>
+                    <strong>Venta rechazada</strong>
+                    <div class="muted">
+                      ${
+                        survey.status === 'rejected'
+                          ? survey.adminNotes || 'Rechazada por jefatura'
+                          : 'Sin rechazo'
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COLUMNA DERECHA -->
+          <div class="detail-side-pro">
+            <div class="detail-card-pro">
+              <h3>Estado</h3>
+
+              <div style="margin:16px 0 20px 0;">
+                ${statusBadge(survey.status)}
+              </div>
+
+              <div class="detail-side-list">
+                <div class="summary-row">
+                  <span>Fecha de creación</span>
+                  <strong>${formatDateTime(survey.createdAt)}</strong>
+                </div>
+
+                <div class="summary-row">
+                  <span>Última actualización</span>
+                  <strong>
+                    ${formatDateTime(survey.updatedAt || survey.createdAt)}
+                  </strong>
+                </div>
+
+                <div class="summary-row">
+                  <span>Vendedor</span>
+                  <strong>${survey.sellerName || '-'}</strong>
+                </div>
+
+                <div class="summary-row">
+                  <span>Cliente</span>
+                  <strong>${survey.holderName || '-'}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-card-pro">
+              <h3>Observaciones de Jefatura</h3>
+
+              <p class="muted" style="margin:0; white-space:pre-wrap;">
+                ${survey.adminNotes || 'Sin observaciones registradas.'}
+              </p>
+            </div>
+
+            <div class="detail-card-pro">
+              <h3>Resumen de contactos</h3>
+
+              <div class="detail-side-list">
+                <div class="summary-row">
+                  <span>Teléfono titular</span>
+                  <strong>${survey.phone1 || '-'}</strong>
+                </div>
+
+                <div class="summary-row">
+                  <span>Contacto 2</span>
+                  <strong>
+                    ${survey.contact2Name || '-'}<br>
+                    ${survey.phone2 || '-'}
+                  </strong>
+                </div>
+
+                <div class="summary-row">
+                  <span>Contacto 3</span>
+                  <strong>
+                    ${survey.contact3Name || 'No informado'}<br>
+                    ${survey.phone3 || ''}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `
+    });
+
+    const backButton = document.getElementById('backFromDetailBtn');
+
+    if (backButton) {
+      backButton.onclick = () => {
+        if (user.role === 'admin') {
+          renderAdminSurveys();
+        } else {
+          renderSellerSurveys(user);
+        }
+      };
+    }
+  } catch (error) {
+    console.error('Error cargando el detalle de la venta:', error);
+    alert('No se pudo cargar el detalle de la venta');
+  }
 };
 
 function init() {
