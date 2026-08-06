@@ -90,6 +90,47 @@ function statusBadge(status) {
   return `<span class="${map[status] || map.pending}">${statusLabel(status)}</span>`;
 }
 
+function escapePotentialClientHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function interestLevelLabel(level) {
+  const labels = {
+    green: '1. Verde',
+    yellow: '2. Amarillo',
+    red: '3. Rojo'
+  };
+
+  return labels[level] || 'Sin definir';
+}
+
+function interestLevelText(level) {
+  const labels = {
+    green: 'Interés alto',
+    yellow: 'Interés medio',
+    red: 'Interés bajo'
+  };
+
+  return labels[level] || 'Sin definir';
+}
+
+function interestLevelBadge(level) {
+  const safeLevel = ['green', 'yellow', 'red'].includes(level)
+    ? level
+    : 'red';
+
+  return `
+    <span class="potential-interest-badge potential-interest-${safeLevel}">
+      ${interestLevelLabel(safeLevel)}
+    </span>
+  `;
+}
+
 function formatDate(value) {
   if (!value) return '-';
   const d = new Date(value);
@@ -259,19 +300,27 @@ function attachSaleSummarySync(form, sellerName, status = 'pending') {
 
 function buildSidebar(user, active) {
   const sellerLinks = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'newSale', label: 'Nueva Venta' },
-    { key: 'mySales', label: 'Mis Ventas' },
-    { key: 'profile', label: 'Mi Perfil' },
-    { key: 'settings', label: 'Configuración' }
-  ];
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'newSale', label: 'Nueva Venta' },
+  { key: 'mySales', label: 'Mis Ventas' },
+  {
+    key: 'potentialClients',
+    label: 'Clientes Potenciales'
+  },
+  { key: 'profile', label: 'Mi Perfil' },
+  { key: 'settings', label: 'Configuración' }
+];
 
-  const adminLinks = [
-    { key: 'dashboard', label: 'Panel de Control' },
-    { key: 'centralSales', label: 'Ventas en Central' },
-    { key: 'vendors', label: 'Vendedores' },
-    { key: 'settings', label: 'Configuración' }
-  ];
+const adminLinks = [
+  { key: 'dashboard', label: 'Panel de Control' },
+  { key: 'centralSales', label: 'Ventas en Central' },
+  {
+    key: 'potentialClients',
+    label: 'Clientes Potenciales'
+  },
+  { key: 'vendors', label: 'Vendedores' },
+  { key: 'settings', label: 'Configuración' }
+];
 
   const links = user.role === 'admin' ? adminLinks : sellerLinks;
 
@@ -379,6 +428,8 @@ function renderAppShell({ user, active, title, subtitle, content, extraActions =
       renderSurveyForm(user);
     } else if (nav === 'mySales') {
       renderSellerSurveys(user);
+    } else if (nav === 'potentialClients') {
+      renderPotentialClients(user);
     } else if (nav === 'profile') {
       renderProfile(user);
     } else if (nav === 'settings') {
@@ -754,6 +805,70 @@ function renderForgotPassword() {
   };
 }
 
+function buildDashboardPotentialClientsCard(
+  recentPotentialClients,
+  user
+) {
+  const isAdmin = user.role === 'admin';
+
+  return `
+    <div class="card potential-dashboard-card">
+      <div class="card-header">
+        <div>
+          <h2>Últimos clientes potenciales</h2>
+
+          <p class="muted">
+            Seguimientos comerciales actualizados recientemente.
+          </p>
+        </div>
+
+        <button
+          class="btn btn-secondary"
+          id="openPotentialClientsDashboardBtn"
+        >
+          Ver todos
+        </button>
+      </div>
+
+      <div class="table-wrap desktop-sales-table">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Cliente / Razón Social</th>
+
+              ${
+                isAdmin
+                  ? '<th>Vendedor</th>'
+                  : ''
+              }
+
+              <th>Contacto / Dirección</th>
+              <th>Localidad</th>
+              <th>Nivel de interés</th>
+              <th>Última actualización</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${buildPotentialClientRows(
+              recentPotentialClients,
+              user
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mobile-sales-list">
+        ${buildPotentialClientCards(
+          recentPotentialClients,
+          user
+        )}
+      </div>
+    </div>
+  `;
+}
+
 async function renderDashboard(user) {
   const statsRes = await fetch(`/api/stats?userId=${user.id}&role=${user.role}`);
   const statsData = await statsRes.json();
@@ -761,6 +876,29 @@ async function renderDashboard(user) {
 
   const surveysRes = await fetch('/api/surveys');
   const surveysData = await surveysRes.json();
+
+  const potentialClients =
+  await fetchPotentialClientsForUser(user);
+
+const recentPotentialClients = [...potentialClients]
+  .sort(
+    (a, b) =>
+      new Date(b.updatedAt || b.createdAt) -
+      new Date(a.updatedAt || a.createdAt)
+  )
+  .slice(0, 5);
+
+const greenPotentialCount = potentialClients.filter(
+  client => client.interestLevel === 'green'
+).length;
+
+const yellowPotentialCount = potentialClients.filter(
+  client => client.interestLevel === 'yellow'
+).length;
+
+const redPotentialCount = potentialClients.filter(
+  client => client.interestLevel === 'red'
+).length;
 
   const surveys = user.role === 'admin'
     ? surveysData.surveys
@@ -814,6 +952,12 @@ async function renderDashboard(user) {
             <div class="stat-meta">Total general</div>
           </div>
         </div>
+        
+        
+        ${buildDashboardPotentialClientsCard(
+          recentPotentialClients,
+          user
+        )}
 
         <div class="card">
           <div class="card-header">
@@ -889,6 +1033,12 @@ async function renderDashboard(user) {
 
     document.getElementById('openCentralBtn').onclick = () => {
       renderAdminSurveys();
+    };
+
+    document.getElementById(
+      'openPotentialClientsDashboardBtn'
+    ).onclick = () => {
+      renderPotentialClients(user);
     };
 
     return;
@@ -2235,6 +2385,1392 @@ function renderProfile(user) {
       alert('No se pudo cargar la información del perfil');
     });
 }
+
+async function fetchPotentialClientsForUser(user) {
+  const params = new URLSearchParams({
+    userId: String(user.id),
+    role: user.role
+  });
+
+  const res = await fetch(
+    `/api/potential-clients?${params.toString()}`
+  );
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(
+      data.error || 'No se pudieron cargar los clientes potenciales'
+    );
+  }
+
+  return Array.isArray(data.potentialClients)
+    ? data.potentialClients
+    : [];
+}
+
+function buildPotentialClientRows(clients, user) {
+  const isAdmin = user.role === 'admin';
+  const columnCount = isAdmin ? 7 : 6;
+
+  if (!clients.length) {
+    return `
+      <tr>
+        <td colspan="${columnCount}">
+          <div class="empty">
+            No hay clientes potenciales para mostrar.
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  return clients.map(client => `
+    <tr>
+      <td>
+        <div style="font-weight:700;">
+          ${escapePotentialClientHtml(
+            client.fullNameOrBusinessName || '-'
+          )}
+        </div>
+
+        <div class="muted">
+          ${escapePotentialClientHtml(client.email || '-')}
+        </div>
+      </td>
+
+      ${
+        isAdmin
+          ? `
+            <td>
+              <div style="font-weight:700;">
+                ${escapePotentialClientHtml(
+                  client.sellerName || '-'
+                )}
+              </div>
+
+              <div class="muted">
+                ID: ${escapePotentialClientHtml(
+                  client.sellerId || '-'
+                )}
+              </div>
+            </td>
+          `
+          : ''
+      }
+
+      <td>
+        <div>
+          ${escapePotentialClientHtml(client.phone || '-')}
+        </div>
+
+        <div class="muted">
+          ${escapePotentialClientHtml(client.address || '-')}
+        </div>
+      </td>
+
+      <td>
+        ${escapePotentialClientHtml(client.city || '-')}
+      </td>
+
+      <td>
+        ${interestLevelBadge(client.interestLevel)}
+      </td>
+
+      <td>
+        ${formatDateTime(
+          client.updatedAt || client.createdAt
+        )}
+      </td>
+
+      <td>
+        <div class="btn-row">
+          <button
+            class="btn btn-outline"
+            onclick="viewPotentialClient(${client.id})"
+          >
+            Ver
+          </button>
+
+          <button
+            class="btn btn-secondary"
+            onclick="editPotentialClient(${client.id})"
+          >
+            Editar
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function buildPotentialClientCards(clients, user) {
+  const isAdmin = user.role === 'admin';
+
+  if (!clients.length) {
+    return `
+      <div class="empty">
+        No hay clientes potenciales para mostrar.
+      </div>
+    `;
+  }
+
+  return clients.map(client => `
+    <div class="sale-card-mobile potential-client-mobile-card">
+      <div class="sale-card-mobile-header">
+        <div>
+          <div class="sale-card-mobile-title">
+            ${escapePotentialClientHtml(
+              client.fullNameOrBusinessName || '-'
+            )}
+          </div>
+
+          <div class="sale-card-mobile-sub">
+            ${escapePotentialClientHtml(client.phone || '-')}
+          </div>
+        </div>
+
+        <div>
+          ${interestLevelBadge(client.interestLevel)}
+        </div>
+      </div>
+
+      <div class="sale-card-mobile-grid">
+        ${
+          isAdmin
+            ? `
+              <div>
+                <span>Vendedor</span>
+                <strong>
+                  ${escapePotentialClientHtml(
+                    client.sellerName || '-'
+                  )}
+                </strong>
+              </div>
+            `
+            : ''
+        }
+
+        <div>
+          <span>Mail</span>
+          <strong>
+            ${escapePotentialClientHtml(client.email || '-')}
+          </strong>
+        </div>
+
+        <div>
+          <span>Localidad</span>
+          <strong>
+            ${escapePotentialClientHtml(client.city || '-')}
+          </strong>
+        </div>
+
+        <div>
+          <span>Último avance</span>
+          <strong>
+            ${formatDate(
+              client.updatedAt || client.createdAt
+            )}
+          </strong>
+        </div>
+      </div>
+
+      <div class="sale-card-mobile-actions">
+        <button
+          class="btn btn-outline"
+          onclick="viewPotentialClient(${client.id})"
+        >
+          Ver
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          onclick="editPotentialClient(${client.id})"
+        >
+          Editar
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function renderPotentialClients(user) {
+  try {
+    const potentialClients =
+      await fetchPotentialClientsForUser(user);
+
+    let sellers = [];
+
+    if (user.role === 'admin') {
+      const usersRes = await fetch('/api/users');
+      const usersData = await usersRes.json();
+
+      sellers = usersRes.ok
+        ? usersData.users.filter(
+            candidate => candidate.role === 'seller'
+          )
+        : [];
+    }
+
+    let currentInterest = 'all';
+    let currentSeller = '';
+    let currentSearch = '';
+
+    function getFilteredClients() {
+      let filtered = [...potentialClients];
+
+      if (currentInterest !== 'all') {
+        filtered = filtered.filter(
+          client =>
+            client.interestLevel === currentInterest
+        );
+      }
+
+      if (currentSeller) {
+        filtered = filtered.filter(
+          client =>
+            String(client.sellerId) === currentSeller
+        );
+      }
+
+      if (currentSearch) {
+        const query = currentSearch.toLowerCase();
+
+        filtered = filtered.filter(client =>
+          String(
+            client.fullNameOrBusinessName || ''
+          ).toLowerCase().includes(query) ||
+
+          String(
+            client.email || ''
+          ).toLowerCase().includes(query) ||
+
+          String(
+            client.phone || ''
+          ).toLowerCase().includes(query) ||
+
+          String(
+            client.address || ''
+          ).toLowerCase().includes(query) ||
+
+          String(
+            client.city || ''
+          ).toLowerCase().includes(query) ||
+
+          String(
+            client.sellerName || ''
+          ).toLowerCase().includes(query)
+        );
+      }
+
+      return filtered.sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt) -
+          new Date(a.updatedAt || a.createdAt)
+      );
+    }
+
+    function renderScreen() {
+      const filtered = getFilteredClients();
+
+      const greenCount = filtered.filter(
+        client => client.interestLevel === 'green'
+      ).length;
+
+      const yellowCount = filtered.filter(
+        client => client.interestLevel === 'yellow'
+      ).length;
+
+      const redCount = filtered.filter(
+        client => client.interestLevel === 'red'
+      ).length;
+
+      renderAppShell({
+        user,
+        active: 'potentialClients',
+        title: 'Clientes Potenciales',
+
+        subtitle: user.role === 'admin'
+          ? 'Consultá y gestioná los posibles clientes registrados por el equipo.'
+          : 'Registrá posibles clientes y realizá el seguimiento comercial.',
+
+        extraActions: `
+  <button
+    class="btn btn-secondary"
+    id="backPotentialDashboardBtn"
+  >
+    Panel de control
+  </button>
+
+  ${
+    user.role === 'seller'
+      ? `
+        <button
+          class="btn btn-primary"
+          id="newPotentialClientBtn"
+        >
+          + Nuevo cliente potencial
+        </button>
+      `
+      : ''
+  }
+`,
+
+        content: `
+          <div class="stats-grid potential-stats-grid">
+            <div class="stat-card mini-stat-card">
+              <h3>Total</h3>
+              <p class="stat-number">${filtered.length}</p>
+              <div class="stat-meta">
+                Registros visibles
+              </div>
+            </div>
+
+            <div class="stat-card mini-stat-card">
+              <h3>Interés alto</h3>
+              <p class="stat-number">${greenCount}</p>
+              <div class="stat-meta">
+                Nivel verde
+              </div>
+            </div>
+
+            <div class="stat-card mini-stat-card">
+              <h3>Interés medio</h3>
+              <p class="stat-number">${yellowCount}</p>
+              <div class="stat-meta">
+                Nivel amarillo
+              </div>
+            </div>
+
+            <div class="stat-card mini-stat-card">
+              <h3>Interés bajo</h3>
+              <p class="stat-number">${redCount}</p>
+              <div class="stat-meta">
+                Nivel rojo
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="toolbar">
+              <div class="tabs">
+                <button
+                  class="tab ${
+                    currentInterest === 'all'
+                      ? 'active'
+                      : ''
+                  }"
+                  data-potential-interest="all"
+                >
+                  Todos
+                </button>
+
+                <button
+                  class="tab ${
+                    currentInterest === 'green'
+                      ? 'active'
+                      : ''
+                  }"
+                  data-potential-interest="green"
+                >
+                  Verdes
+                </button>
+
+                <button
+                  class="tab ${
+                    currentInterest === 'yellow'
+                      ? 'active'
+                      : ''
+                  }"
+                  data-potential-interest="yellow"
+                >
+                  Amarillos
+                </button>
+
+                <button
+                  class="tab ${
+                    currentInterest === 'red'
+                      ? 'active'
+                      : ''
+                  }"
+                  data-potential-interest="red"
+                >
+                  Rojos
+                </button>
+              </div>
+
+              <div class="toolbar-right">
+                ${
+                  user.role === 'admin'
+                    ? `
+                      <select
+                        class="select"
+                        id="potentialSellerFilter"
+                      >
+                        <option value="">
+                          Todos los vendedores
+                        </option>
+
+                        ${sellers.map(seller => `
+                          <option
+                            value="${seller.id}"
+                            ${
+                              currentSeller === String(seller.id)
+                                ? 'selected'
+                                : ''
+                            }
+                          >
+                            ${escapePotentialClientHtml(
+                              seller.name
+                            )}
+                          </option>
+                        `).join('')}
+                      </select>
+                    `
+                    : ''
+                }
+
+                <input
+                  class="input search"
+                  id="potentialClientSearch"
+                  placeholder="Buscar por nombre, mail, celular o localidad..."
+                  value="${escapePotentialClientHtml(
+                    currentSearch
+                  )}"
+                >
+
+                <button
+                  class="btn btn-secondary"
+                  id="resetPotentialFiltersBtn"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </div>
+
+            <div class="table-wrap desktop-sales-table">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>
+                      Persona / Razón Social
+                    </th>
+
+                    ${
+                      user.role === 'admin'
+                        ? '<th>Vendedor</th>'
+                        : ''
+                    }
+
+                    <th>Contacto / Dirección</th>
+                    <th>Localidad</th>
+                    <th>Nivel de interés</th>
+                    <th>Última actualización</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+
+                <tbody id="potentialClientsTableBody">
+                  ${buildPotentialClientRows(
+                    filtered,
+                    user
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div
+              class="mobile-sales-list"
+              id="potentialClientsCards"
+            >
+              ${buildPotentialClientCards(
+                filtered,
+                user
+              )}
+            </div>
+          </div>
+        `
+      });
+
+      const dashboardButton = document.getElementById(
+  'backPotentialDashboardBtn'
+);
+
+if (dashboardButton) {
+  dashboardButton.onclick = () => {
+    renderDashboard(user);
+  };
+}
+
+      const newButton = document.getElementById(
+        'newPotentialClientBtn'
+      );
+
+      if (newButton) {
+        newButton.onclick = () => {
+          openPotentialClientForm(user);
+        };
+      }
+
+      document.querySelectorAll(
+        '[data-potential-interest]'
+      ).forEach(button => {
+        button.onclick = () => {
+          currentInterest =
+            button.dataset.potentialInterest;
+
+          renderScreen();
+        };
+      });
+
+      const sellerFilter = document.getElementById(
+        'potentialSellerFilter'
+      );
+
+      if (sellerFilter) {
+        sellerFilter.onchange = event => {
+          currentSeller = event.target.value;
+          renderScreen();
+        };
+      }
+
+      document.getElementById(
+        'potentialClientSearch'
+      ).oninput = event => {
+        currentSearch = event.target.value.trim();
+
+        const filteredNow = getFilteredClients();
+
+        document.getElementById(
+          'potentialClientsTableBody'
+        ).innerHTML = buildPotentialClientRows(
+          filteredNow,
+          user
+        );
+
+        document.getElementById(
+          'potentialClientsCards'
+        ).innerHTML = buildPotentialClientCards(
+          filteredNow,
+          user
+        );
+      };
+
+      document.getElementById(
+        'resetPotentialFiltersBtn'
+      ).onclick = () => {
+        currentInterest = 'all';
+        currentSeller = '';
+        currentSearch = '';
+        renderScreen();
+      };
+    }
+
+    renderScreen();
+  } catch (error) {
+    console.error(
+      'Error cargando clientes potenciales:',
+      error
+    );
+
+    alert(
+      'No se pudieron cargar los clientes potenciales'
+    );
+  }
+}
+
+function closePotentialClientModal() {
+  const overlay = document.getElementById(
+    'potentialClientModalOverlay'
+  );
+
+  if (overlay) {
+    overlay.remove();
+  }
+}
+
+function openPotentialClientForm(user, client = null) {
+  closePotentialClientModal();
+
+  const isEditing = Boolean(client);
+
+  const overlay = document.createElement('div');
+
+  overlay.id = 'potentialClientModalOverlay';
+  overlay.className = 'modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal-card potential-client-modal">
+      <div class="modal-header">
+        <div>
+          <h3>
+            ${
+              isEditing
+                ? 'Editar cliente potencial'
+                : 'Nuevo cliente potencial'
+            }
+          </h3>
+
+          <p>
+            Completá la información comercial del posible cliente.
+          </p>
+        </div>
+
+        <button
+          class="modal-close-btn"
+          id="closePotentialClientModalBtn"
+          type="button"
+        >
+          ✕
+        </button>
+      </div>
+
+      ${
+        user.role === 'admin' && client
+          ? `
+            <div class="potential-client-owner">
+              Registrado por:
+              <strong>
+                ${escapePotentialClientHtml(
+                  client.sellerName || '-'
+                )}
+              </strong>
+            </div>
+          `
+          : ''
+      }
+
+      <form id="potentialClientForm">
+        <div class="potential-form-grid">
+          <div class="field potential-field-wide">
+            <label>
+              Apellido y Nombre / Razón Social
+            </label>
+
+            <input
+              class="input"
+              name="fullNameOrBusinessName"
+              required
+              value="${escapePotentialClientHtml(
+                client?.fullNameOrBusinessName || ''
+              )}"
+              placeholder="Ej: Juan Pérez o Comercio Central"
+            >
+          </div>
+
+          <div class="field">
+            <label>Mail</label>
+
+            <input
+              class="input"
+              name="email"
+              type="email"
+              required
+              value="${escapePotentialClientHtml(
+                client?.email || ''
+              )}"
+              placeholder="correo@ejemplo.com"
+            >
+          </div>
+
+          <div class="field">
+            <label>Celular</label>
+
+            <input
+              class="input"
+              name="phone"
+              required
+              value="${escapePotentialClientHtml(
+                client?.phone || ''
+              )}"
+              placeholder="Ej: 351 1234567"
+            >
+          </div>
+
+          <div class="field">
+            <label>Dirección</label>
+
+            <input
+              class="input"
+              name="address"
+              required
+              value="${escapePotentialClientHtml(
+                client?.address || ''
+              )}"
+              placeholder="Calle y número"
+            >
+          </div>
+
+          <div class="field">
+            <label>Localidad</label>
+
+            <input
+              class="input"
+              name="city"
+              required
+              value="${escapePotentialClientHtml(
+                client?.city || ''
+              )}"
+              placeholder="Localidad"
+            >
+          </div>
+
+          <div class="field potential-field-wide">
+            <label>Nivel de Interés</label>
+
+            <select
+              class="select potential-interest-select"
+              name="interestLevel"
+              required
+            >
+              <option
+                value="green"
+                ${
+                  !client ||
+                  client.interestLevel === 'green'
+                    ? 'selected'
+                    : ''
+                }
+              >
+                1. Verde — Interés alto
+              </option>
+
+              <option
+                value="yellow"
+                ${
+                  client?.interestLevel === 'yellow'
+                    ? 'selected'
+                    : ''
+                }
+              >
+                2. Amarillo — Interés medio
+              </option>
+
+              <option
+                value="red"
+                ${
+                  client?.interestLevel === 'red'
+                    ? 'selected'
+                    : ''
+                }
+              >
+                3. Rojo — Interés bajo
+              </option>
+            </select>
+          </div>
+
+          <div class="field potential-field-wide">
+            <label>Observaciones</label>
+
+            <textarea
+              class="textarea"
+              name="observations"
+              placeholder="Información general del posible cliente..."
+            >${escapePotentialClientHtml(
+              client?.observations || ''
+            )}</textarea>
+          </div>
+        </div>
+
+        <div id="potentialClientFormMsg"></div>
+
+        <div class="modal-actions">
+          <button
+            class="btn btn-secondary"
+            type="button"
+            id="cancelPotentialClientBtn"
+          >
+            Cancelar
+          </button>
+
+          <button
+            class="btn btn-primary"
+            type="submit"
+            id="savePotentialClientBtn"
+          >
+            ${
+              isEditing
+                ? 'Guardar cambios'
+                : 'Crear cliente potencial'
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById(
+    'closePotentialClientModalBtn'
+  ).onclick = closePotentialClientModal;
+
+  document.getElementById(
+    'cancelPotentialClientBtn'
+  ).onclick = closePotentialClientModal;
+
+  overlay.onclick = event => {
+    if (event.target === overlay) {
+      closePotentialClientModal();
+    }
+  };
+
+  document.getElementById(
+    'potentialClientForm'
+  ).onsubmit = async event => {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    const body = Object.fromEntries(formData);
+
+    if (!isEditing) {
+      body.sellerId = user.id;
+      body.sellerName = user.name;
+    }
+
+    const saveButton = document.getElementById(
+      'savePotentialClientBtn'
+    );
+
+    const messageBox = document.getElementById(
+      'potentialClientFormMsg'
+    );
+
+    saveButton.disabled = true;
+    saveButton.textContent = 'Guardando...';
+
+    try {
+      const res = await fetch(
+        isEditing
+          ? `/api/potential-clients/${client.id}`
+          : '/api/potential-clients',
+        {
+          method: isEditing ? 'PATCH' : 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        messageBox.innerHTML = `
+          <p style="color:#dc2626;">
+            ${escapePotentialClientHtml(
+              data.error || 'No se pudo guardar'
+            )}
+          </p>
+        `;
+
+        saveButton.disabled = false;
+        saveButton.textContent = isEditing
+          ? 'Guardar cambios'
+          : 'Crear cliente potencial';
+
+        return;
+      }
+
+      messageBox.innerHTML = `
+        <p style="color:#16a34a;">
+          ${escapePotentialClientHtml(data.message)}
+        </p>
+      `;
+
+      setTimeout(() => {
+        closePotentialClientModal();
+        renderPotentialClients(user);
+      }, 400);
+    } catch (error) {
+      console.error(
+        'Error guardando cliente potencial:',
+        error
+      );
+
+      messageBox.innerHTML = `
+        <p style="color:#dc2626;">
+          No se pudo guardar el cliente potencial
+        </p>
+      `;
+
+      saveButton.disabled = false;
+      saveButton.textContent = isEditing
+        ? 'Guardar cambios'
+        : 'Crear cliente potencial';
+    }
+  };
+}
+
+function closePotentialFollowUpModal() {
+  const overlay = document.getElementById(
+    'potentialFollowUpModalOverlay'
+  );
+
+  if (overlay) {
+    overlay.remove();
+  }
+}
+
+function openPotentialFollowUpModal(user, client) {
+  closePotentialFollowUpModal();
+
+  const overlay = document.createElement('div');
+
+  overlay.id = 'potentialFollowUpModalOverlay';
+  overlay.className = 'modal-overlay';
+
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3>+ Agregar avance</h3>
+
+          <p>
+            ${escapePotentialClientHtml(
+              client.fullNameOrBusinessName || ''
+            )}
+          </p>
+        </div>
+
+        <button
+          class="modal-close-btn"
+          id="closePotentialFollowUpBtn"
+          type="button"
+        >
+          ✕
+        </button>
+      </div>
+
+      <form id="potentialFollowUpForm">
+        <div class="field">
+          <label>Avance del seguimiento</label>
+
+          <textarea
+            class="textarea"
+            name="text"
+            required
+            placeholder="Ej: Se realizó una visita y solicitó una nueva propuesta..."
+          ></textarea>
+        </div>
+
+        <div id="potentialFollowUpMsg"></div>
+
+        <div class="modal-actions">
+          <button
+            class="btn btn-secondary"
+            type="button"
+            id="cancelPotentialFollowUpBtn"
+          >
+            Cancelar
+          </button>
+
+          <button
+            class="btn btn-primary"
+            type="submit"
+            id="savePotentialFollowUpBtn"
+          >
+            Agregar avance
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById(
+    'closePotentialFollowUpBtn'
+  ).onclick = closePotentialFollowUpModal;
+
+  document.getElementById(
+    'cancelPotentialFollowUpBtn'
+  ).onclick = closePotentialFollowUpModal;
+
+  overlay.onclick = event => {
+    if (event.target === overlay) {
+      closePotentialFollowUpModal();
+    }
+  };
+
+  document.getElementById(
+    'potentialFollowUpForm'
+  ).onsubmit = async event => {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    const body = Object.fromEntries(formData);
+
+    body.authorId = user.id;
+    body.authorName = user.name;
+    body.authorRole = user.role;
+
+    const saveButton = document.getElementById(
+      'savePotentialFollowUpBtn'
+    );
+
+    const messageBox = document.getElementById(
+      'potentialFollowUpMsg'
+    );
+
+    saveButton.disabled = true;
+    saveButton.textContent = 'Guardando...';
+
+    try {
+      const res = await fetch(
+        `/api/potential-clients/${client.id}/follow-ups`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        messageBox.innerHTML = `
+          <p style="color:#dc2626;">
+            ${escapePotentialClientHtml(
+              data.error || 'No se pudo agregar el avance'
+            )}
+          </p>
+        `;
+
+        saveButton.disabled = false;
+        saveButton.textContent = 'Agregar avance';
+        return;
+      }
+
+      closePotentialFollowUpModal();
+      viewPotentialClient(client.id);
+    } catch (error) {
+      console.error(
+        'Error agregando avance:',
+        error
+      );
+
+      messageBox.innerHTML = `
+        <p style="color:#dc2626;">
+          No se pudo agregar el avance
+        </p>
+      `;
+
+      saveButton.disabled = false;
+      saveButton.textContent = 'Agregar avance';
+    }
+  };
+}
+
+window.editPotentialClient = async function(id) {
+  const user = getSession();
+
+  if (!user) {
+    renderHome();
+    return;
+  }
+
+  try {
+    const clients =
+      await fetchPotentialClientsForUser(user);
+
+    const client = clients.find(
+      item => Number(item.id) === Number(id)
+    );
+
+    if (!client) {
+      alert('Cliente potencial no encontrado');
+      return;
+    }
+
+    openPotentialClientForm(user, client);
+  } catch (error) {
+    console.error(
+      'Error buscando cliente potencial:',
+      error
+    );
+
+    alert('No se pudo cargar el cliente potencial');
+  }
+};
+
+window.viewPotentialClient = async function(id) {
+  const user = getSession();
+
+  if (!user) {
+    renderHome();
+    return;
+  }
+
+  try {
+    const clients =
+      await fetchPotentialClientsForUser(user);
+
+    const client = clients.find(
+      item => Number(item.id) === Number(id)
+    );
+
+    if (!client) {
+      alert('Cliente potencial no encontrado');
+      return;
+    }
+
+    const followUps = Array.isArray(client.followUps)
+      ? [...client.followUps].sort(
+          (a, b) =>
+            new Date(b.createdAt) -
+            new Date(a.createdAt)
+        )
+      : [];
+
+    renderAppShell({
+      user,
+      active: 'potentialClients',
+      title: 'Detalle del Cliente Potencial',
+
+      subtitle:
+        client.fullNameOrBusinessName ||
+        'Seguimiento comercial',
+
+      extraActions: `
+        <button
+          class="btn btn-secondary"
+          id="backPotentialClientsBtn"
+        >
+          Volver
+        </button>
+
+        <button
+          class="btn btn-outline"
+          id="editPotentialClientBtn"
+        >
+          Editar
+        </button>
+
+        <button
+          class="btn btn-primary"
+          id="addPotentialFollowUpBtn"
+        >
+          + Agregar avance
+        </button>
+      `,
+
+      content: `
+        <div class="profile-grid potential-detail-grid">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>
+                  ${escapePotentialClientHtml(
+                    client.fullNameOrBusinessName || '-'
+                  )}
+                </h2>
+
+                <div style="margin-top:8px;">
+                  ${interestLevelBadge(
+                    client.interestLevel
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div class="info-list">
+              ${
+                user.role === 'admin'
+                  ? `
+                    <div class="info-row">
+                      <div>Vendedor</div>
+                      <div>
+                        ${escapePotentialClientHtml(
+                          client.sellerName || '-'
+                        )}
+                      </div>
+                    </div>
+                  `
+                  : ''
+              }
+
+              <div class="info-row">
+                <div>Mail</div>
+                <div>
+                  ${escapePotentialClientHtml(
+                    client.email || '-'
+                  )}
+                </div>
+              </div>
+
+              <div class="info-row">
+                <div>Celular</div>
+                <div>
+                  ${escapePotentialClientHtml(
+                    client.phone || '-'
+                  )}
+                </div>
+              </div>
+
+              <div class="info-row">
+                <div>Dirección</div>
+                <div>
+                  ${escapePotentialClientHtml(
+                    client.address || '-'
+                  )}
+                </div>
+              </div>
+
+              <div class="info-row">
+                <div>Localidad</div>
+                <div>
+                  ${escapePotentialClientHtml(
+                    client.city || '-'
+                  )}
+                </div>
+              </div>
+
+              <div class="info-row">
+                <div>Nivel de interés</div>
+                <div>
+                  ${interestLevelText(
+                    client.interestLevel
+                  )}
+                </div>
+              </div>
+
+              <div class="info-row">
+                <div>Fecha de carga</div>
+                <div>
+                  ${formatDateTime(client.createdAt)}
+                </div>
+              </div>
+
+              <div class="info-row">
+                <div>Última actualización</div>
+                <div>
+                  ${formatDateTime(
+                    client.updatedAt ||
+                    client.createdAt
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Observaciones</h2>
+            </div>
+
+            <div class="potential-observations">
+              ${
+                client.observations
+                  ? escapePotentialClientHtml(
+                      client.observations
+                    ).replace(/\n/g, '<br>')
+                  : '<span class="muted">Sin observaciones.</span>'
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="card potential-follow-up-card">
+          <div class="card-header">
+            <div>
+              <h2>Avances del seguimiento</h2>
+
+              <p class="muted">
+                Historial de contactos y novedades comerciales.
+              </p>
+            </div>
+
+            <button
+              class="btn btn-primary"
+              id="addPotentialFollowUpBtnInside"
+            >
+              + Agregar avance
+            </button>
+          </div>
+
+          <div class="potential-follow-up-list">
+            ${
+              followUps.length
+                ? followUps.map(followUp => `
+                  <div class="potential-follow-up-item">
+                    <div class="potential-follow-up-marker"></div>
+
+                    <div class="potential-follow-up-content">
+                      <div class="potential-follow-up-header">
+                        <strong>
+                          ${escapePotentialClientHtml(
+                            followUp.authorName ||
+                            'Usuario'
+                          )}
+                        </strong>
+
+                        <span class="muted">
+                          ${roleLabel(
+                            followUp.authorRole
+                          )}
+                          ·
+                          ${formatDateTime(
+                            followUp.createdAt
+                          )}
+                        </span>
+                      </div>
+
+                      <div class="potential-follow-up-text">
+                        ${escapePotentialClientHtml(
+                          followUp.text || ''
+                        ).replace(/\n/g, '<br>')}
+                      </div>
+                    </div>
+                  </div>
+                `).join('')
+                : `
+                  <div class="empty">
+                    Todavía no se agregaron avances.
+                  </div>
+                `
+            }
+          </div>
+        </div>
+      `
+    });
+
+    document.getElementById(
+      'backPotentialClientsBtn'
+    ).onclick = () => {
+      renderPotentialClients(user);
+    };
+
+    document.getElementById(
+      'editPotentialClientBtn'
+    ).onclick = () => {
+      openPotentialClientForm(user, client);
+    };
+
+    document.getElementById(
+      'addPotentialFollowUpBtn'
+    ).onclick = () => {
+      openPotentialFollowUpModal(user, client);
+    };
+
+    document.getElementById(
+      'addPotentialFollowUpBtnInside'
+    ).onclick = () => {
+      openPotentialFollowUpModal(user, client);
+    };
+  } catch (error) {
+    console.error(
+      'Error cargando detalle de cliente potencial:',
+      error
+    );
+
+    alert(
+      'No se pudo cargar el cliente potencial'
+    );
+  }
+};
 
 function renderSettings(user) {
   renderAppShell({

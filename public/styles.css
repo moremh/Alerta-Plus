@@ -1707,3 +1707,340 @@ body[data-theme="dark"] .sale-card-mobile-sub,
 body[data-theme="dark"] .sale-card-mobile-grid span{
   color:var(--muted);
 }
+
+/* =====================================================
+   CLIENTES POTENCIALES
+===================================================== */
+
+.potential-stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Nivel de interés */
+
+.potential-interest-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 105px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.potential-interest-badge::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Verde — interés alto */
+
+.potential-interest-green {
+  background: #ecfdf5;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.potential-interest-green::before {
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+}
+
+/* Amarillo — interés medio */
+
+.potential-interest-yellow {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.potential-interest-yellow::before {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+/* Rojo — interés bajo */
+
+.potential-interest-red {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.potential-interest-red::before {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+/* Formulario */
+
+.potential-client-modal {
+  width: min(100%, 780px);
+}
+
+.potential-client-owner {
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+}
+
+.potential-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+
+.potential-field-wide {
+  grid-column: 1 / -1;
+}
+
+.potential-interest-select {
+  font-weight: 700;
+}
+
+/* Detalle */
+
+.potential-detail-grid {
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.potential-observations {
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-2);
+  color: var(--text);
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+/* Seguimientos */
+
+.potential-follow-up-card {
+  margin-top: 18px;
+}
+
+.potential-follow-up-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.potential-follow-up-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 14px;
+  padding: 8px 0 22px;
+}
+
+.potential-follow-up-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 21px;
+  bottom: -3px;
+  left: 6px;
+  width: 2px;
+  background: #dbeafe;
+}
+
+.potential-follow-up-marker {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border: 3px solid #bfdbfe;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 4px var(--surface);
+}
+
+.potential-follow-up-content {
+  min-width: 0;
+  padding: 15px 16px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-2);
+}
+
+.potential-follow-up-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.potential-follow-up-header strong {
+  color: var(--text);
+}
+
+.potential-follow-up-header .muted {
+  font-size: 13px;
+}
+
+.potential-follow-up-text {
+  color: var(--text);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* Tarjeta móvil específica */
+
+.potential-client-mobile-card {
+  border-left: 4px solid #2563eb;
+}
+
+.potential-client-mobile-card .potential-interest-badge {
+  min-width: auto;
+}
+
+/* =====================================================
+   CLIENTES POTENCIALES — MODO OSCURO
+===================================================== */
+
+body[data-theme="dark"] .potential-client-owner {
+  background: rgba(37, 99, 235, 0.14);
+  color: #bfdbfe;
+  border-color: rgba(96, 165, 250, 0.4);
+}
+
+body[data-theme="dark"] .potential-observations,
+body[data-theme="dark"] .potential-follow-up-content {
+  background: #0f1b2d;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+body[data-theme="dark"]
+  .potential-follow-up-item:not(:last-child)::before {
+  background: #334155;
+}
+
+body[data-theme="dark"] .potential-follow-up-marker {
+  border-color: #60a5fa;
+  background: #3b82f6;
+  box-shadow: 0 0 0 4px var(--surface);
+}
+
+body[data-theme="dark"] .potential-interest-green {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+body[data-theme="dark"] .potential-interest-yellow {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+body[data-theme="dark"] .potential-interest-red {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* =====================================================
+   CLIENTES POTENCIALES — RESPONSIVE
+===================================================== */
+
+@media (max-width: 1200px) {
+  .potential-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .potential-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .potential-field-wide {
+    grid-column: auto;
+  }
+
+  .potential-follow-up-header {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .potential-follow-up-content {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .potential-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .potential-client-modal {
+    width: 100%;
+  }
+
+  .potential-interest-badge {
+    white-space: normal;
+    text-align: left;
+  }
+
+  .potential-follow-up-card .card-header {
+    align-items: stretch;
+  }
+
+  .potential-follow-up-card .card-header .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .potential-follow-up-item {
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .potential-follow-up-item:not(:last-child)::before {
+    left: 5px;
+  }
+
+  .potential-follow-up-marker {
+    width: 12px;
+    height: 12px;
+  }
+
+  .potential-follow-up-content {
+    padding: 12px;
+  }
+
+  .potential-client-owner {
+    padding: 12px;
+  }
+}
+
+/* Separación entre Clientes Potenciales y Ventas en Central */
+
+.potential-dashboard-card {
+  margin-bottom: 18px;
+}
+
+@media (max-width: 640px) {
+  .potential-dashboard-card {
+    margin-bottom: 14px;
+  }
+}

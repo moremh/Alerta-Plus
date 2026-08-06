@@ -10,6 +10,10 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const SURVEYS_FILE = path.join(DATA_DIR, 'surveys.json');
+const POTENTIAL_CLIENTS_FILE = path.join(
+  DATA_DIR,
+  'potential-clients.json'
+);
 const RESETS_FILE = path.join(DATA_DIR, 'password_resets.json');
 const RESET_PREVIEW_FILE = path.join(DATA_DIR, 'password-reset-preview.txt');
 
@@ -91,6 +95,39 @@ function loadSurveys() {
 
 function saveSurveys(surveys) {
   saveJson(SURVEYS_FILE, surveys);
+}
+
+function loadPotentialClients() {
+  const clients = loadJson(POTENTIAL_CLIENTS_FILE, []);
+
+  let changed = false;
+
+  for (const client of clients) {
+    if (!Array.isArray(client.followUps)) {
+      client.followUps = [];
+      changed = true;
+    }
+
+    if (!client.createdAt) {
+      client.createdAt = new Date().toISOString();
+      changed = true;
+    }
+
+    if (!client.updatedAt) {
+      client.updatedAt = client.createdAt;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    saveJson(POTENTIAL_CLIENTS_FILE, clients);
+  }
+
+  return clients;
+}
+
+function savePotentialClients(clients) {
+  saveJson(POTENTIAL_CLIENTS_FILE, clients);
 }
 
 function loadResets() {
@@ -227,7 +264,7 @@ function exportSurveysToExcel(res, surveys) {
                 <td>${escapeHtml(s.dniFrontName)}</td>
                 <td>${escapeHtml(s.dniBackName)}</td>
                 <td>${escapeHtml(s.observations)}</td>
-                <td>${escapeHtml(surveyStatusLabel(s.status))}</td><td>${escapeHtml(s.status)}</td>
+                <td>${escapeHtml(surveyStatusLabel(s.status))}</td>
                 <td>${escapeHtml(s.adminNotes || '')}</td>
                 <td>${escapeHtml(s.createdAt)}</td>
               </tr>
@@ -556,6 +593,363 @@ const server = http.createServer(async (req, res) => {
 
       return sendJson(res, 200, { stats });
     }
+
+    if (
+  req.url.startsWith('/api/potential-clients') &&
+  req.method === 'GET'
+) {
+  const urlObj = new URL(
+    req.url,
+    `http://${req.headers.host}`
+  );
+
+  if (urlObj.pathname !== '/api/potential-clients') {
+    return sendJson(res, 404, {
+      error: 'Ruta no encontrada'
+    });
+  }
+
+  const userId = Number(
+    urlObj.searchParams.get('userId') || 0
+  );
+
+  const role = String(
+    urlObj.searchParams.get('role') || ''
+  );
+
+  let potentialClients = loadPotentialClients();
+
+  /*
+    El administrador recibe todos los registros.
+    El vendedor recibe solamente los que cargó.
+  */
+  if (role === 'seller') {
+    potentialClients = potentialClients.filter(
+      client => Number(client.sellerId) === userId
+    );
+  }
+
+  potentialClients.sort(
+    (a, b) =>
+      new Date(b.updatedAt || b.createdAt) -
+      new Date(a.updatedAt || a.createdAt)
+  );
+
+  return sendJson(res, 200, {
+    potentialClients
+  });
+}
+
+/*
+  Crear un cliente potencial
+*/
+if (
+  req.url === '/api/potential-clients' &&
+  req.method === 'POST'
+) {
+  const potentialClients = loadPotentialClients();
+  const body = await readBody(req);
+
+  const requiredFields = [
+    'sellerId',
+    'sellerName',
+    'fullNameOrBusinessName',
+    'email',
+    'phone',
+    'address',
+    'city',
+    'interestLevel'
+  ];
+
+  for (const field of requiredFields) {
+    if (
+      body[field] === undefined ||
+      String(body[field]).trim() === ''
+    ) {
+      return sendJson(res, 400, {
+        error: `Falta completar: ${field}`
+      });
+    }
+  }
+
+  const allowedInterestLevels = [
+    'green',
+    'yellow',
+    'red'
+  ];
+
+  const interestLevel = String(
+    body.interestLevel
+  ).trim().toLowerCase();
+
+  if (!allowedInterestLevels.includes(interestLevel)) {
+    return sendJson(res, 400, {
+      error: 'Nivel de interés inválido'
+    });
+  }
+
+  const now = new Date().toISOString();
+
+  const newPotentialClient = {
+    id: potentialClients.length
+      ? Math.max(
+          ...potentialClients.map(
+            client => Number(client.id) || 0
+          )
+        ) + 1
+      : 1,
+
+    sellerId: Number(body.sellerId),
+    sellerName: String(body.sellerName).trim(),
+
+    fullNameOrBusinessName: String(
+      body.fullNameOrBusinessName
+    ).trim(),
+
+    email: String(body.email).trim(),
+    phone: String(body.phone).trim(),
+    address: String(body.address).trim(),
+    city: String(body.city).trim(),
+
+    interestLevel,
+
+    observations: String(
+      body.observations || ''
+    ).trim(),
+
+    followUps: [],
+
+    createdAt: now,
+    updatedAt: now
+  };
+
+  potentialClients.push(newPotentialClient);
+  savePotentialClients(potentialClients);
+
+  return sendJson(res, 201, {
+    message: 'Cliente potencial guardado correctamente',
+    potentialClient: newPotentialClient
+  });
+}
+
+/*
+  Agregar un avance de seguimiento
+*/
+const potentialFollowUpMatch = new URL(
+  req.url,
+  `http://${req.headers.host}`
+).pathname.match(
+  /^\/api\/potential-clients\/(\d+)\/follow-ups$/
+);
+
+if (
+  potentialFollowUpMatch &&
+  req.method === 'POST'
+) {
+  const potentialClients = loadPotentialClients();
+
+  const clientId = Number(
+    potentialFollowUpMatch[1]
+  );
+
+  const body = await readBody(req);
+
+  const potentialClient = potentialClients.find(
+    client => Number(client.id) === clientId
+  );
+
+  if (!potentialClient) {
+    return sendJson(res, 404, {
+      error: 'Cliente potencial no encontrado'
+    });
+  }
+
+  const text = String(body.text || '').trim();
+
+  if (!text) {
+    return sendJson(res, 400, {
+      error: 'Escribí el avance del seguimiento'
+    });
+  }
+
+  if (!Array.isArray(potentialClient.followUps)) {
+    potentialClient.followUps = [];
+  }
+
+  const now = new Date().toISOString();
+
+  const newFollowUp = {
+    id: potentialClient.followUps.length
+      ? Math.max(
+          ...potentialClient.followUps.map(
+            followUp => Number(followUp.id) || 0
+          )
+        ) + 1
+      : 1,
+
+    text,
+
+    authorId: Number(body.authorId || 0),
+
+    authorName: String(
+      body.authorName || 'Usuario'
+    ).trim(),
+
+    authorRole:
+      body.authorRole === 'admin'
+        ? 'admin'
+        : 'seller',
+
+    createdAt: now
+  };
+
+  potentialClient.followUps.push(newFollowUp);
+  potentialClient.updatedAt = now;
+
+  savePotentialClients(potentialClients);
+
+  return sendJson(res, 201, {
+    message: 'Avance agregado correctamente',
+    followUp: newFollowUp,
+    potentialClient
+  });
+}
+
+/*
+  Editar un cliente potencial
+*/
+const potentialClientMatch = new URL(
+  req.url,
+  `http://${req.headers.host}`
+).pathname.match(
+  /^\/api\/potential-clients\/(\d+)$/
+);
+
+if (
+  potentialClientMatch &&
+  req.method === 'PATCH'
+) {
+  const potentialClients = loadPotentialClients();
+
+  const clientId = Number(
+    potentialClientMatch[1]
+  );
+
+  const body = await readBody(req);
+
+  const potentialClient = potentialClients.find(
+    client => Number(client.id) === clientId
+  );
+
+  if (!potentialClient) {
+    return sendJson(res, 404, {
+      error: 'Cliente potencial no encontrado'
+    });
+  }
+
+  if (body.fullNameOrBusinessName !== undefined) {
+    const value = String(
+      body.fullNameOrBusinessName
+    ).trim();
+
+    if (!value) {
+      return sendJson(res, 400, {
+        error:
+          'Apellido y nombre o razón social es obligatorio'
+      });
+    }
+
+    potentialClient.fullNameOrBusinessName = value;
+  }
+
+  if (body.email !== undefined) {
+    const value = String(body.email).trim();
+
+    if (!value) {
+      return sendJson(res, 400, {
+        error: 'El mail es obligatorio'
+      });
+    }
+
+    potentialClient.email = value;
+  }
+
+  if (body.phone !== undefined) {
+    const value = String(body.phone).trim();
+
+    if (!value) {
+      return sendJson(res, 400, {
+        error: 'El celular es obligatorio'
+      });
+    }
+
+    potentialClient.phone = value;
+  }
+
+  if (body.address !== undefined) {
+    const value = String(body.address).trim();
+
+    if (!value) {
+      return sendJson(res, 400, {
+        error: 'La dirección es obligatoria'
+      });
+    }
+
+    potentialClient.address = value;
+  }
+
+  if (body.city !== undefined) {
+    const value = String(body.city).trim();
+
+    if (!value) {
+      return sendJson(res, 400, {
+        error: 'La localidad es obligatoria'
+      });
+    }
+
+    potentialClient.city = value;
+  }
+
+  if (body.interestLevel !== undefined) {
+    const allowedInterestLevels = [
+      'green',
+      'yellow',
+      'red'
+    ];
+
+    const interestLevel = String(
+      body.interestLevel
+    ).trim().toLowerCase();
+
+    if (
+      !allowedInterestLevels.includes(interestLevel)
+    ) {
+      return sendJson(res, 400, {
+        error: 'Nivel de interés inválido'
+      });
+    }
+
+    potentialClient.interestLevel = interestLevel;
+  }
+
+  if (body.observations !== undefined) {
+    potentialClient.observations = String(
+      body.observations || ''
+    ).trim();
+  }
+
+  potentialClient.updatedAt =
+    new Date().toISOString();
+
+  savePotentialClients(potentialClients);
+
+  return sendJson(res, 200, {
+    message:
+      'Cliente potencial actualizado correctamente',
+
+    potentialClient
+  });
+}
 
     if (req.url === '/api/surveys' && req.method === 'GET') {
       const surveys = loadSurveys();
