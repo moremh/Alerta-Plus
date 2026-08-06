@@ -133,6 +133,13 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+function surveyStatusLabel(status) {
+  if (status === 'confirmed') return 'Aprobada';
+  if (status === 'paid') return 'Aprobado Abonado';
+  if (status === 'rejected') return 'Rechazada';
+  return 'Pendiente';
+}
+
 function exportSurveysToExcel(res, surveys) {
   const html = `
     <html>
@@ -220,7 +227,7 @@ function exportSurveysToExcel(res, surveys) {
                 <td>${escapeHtml(s.dniFrontName)}</td>
                 <td>${escapeHtml(s.dniBackName)}</td>
                 <td>${escapeHtml(s.observations)}</td>
-                <td>${escapeHtml(s.status)}</td>
+                <td>${escapeHtml(surveyStatusLabel(s.status))}</td><td>${escapeHtml(s.status)}</td>
                 <td>${escapeHtml(s.adminNotes || '')}</td>
                 <td>${escapeHtml(s.createdAt)}</td>
               </tr>
@@ -524,12 +531,28 @@ const server = http.createServer(async (req, res) => {
       }
 
       const stats = {
-        total: filteredSurveys.length,
-        pending: filteredSurveys.filter(s => s.status === 'pending').length,
-        confirmed: filteredSurveys.filter(s => s.status === 'confirmed').length,
-        rejected: filteredSurveys.filter(s => s.status === 'rejected').length,
-        activeSellers: users.filter(u => u.role === 'seller' && u.active).length
-      };
+  total: filteredSurveys.length,
+
+  pending: filteredSurveys.filter(
+    s => s.status === 'pending'
+  ).length,
+
+  confirmed: filteredSurveys.filter(
+    s => s.status === 'confirmed'
+  ).length,
+
+  paid: filteredSurveys.filter(
+    s => s.status === 'paid'
+  ).length,
+
+  rejected: filteredSurveys.filter(
+    s => s.status === 'rejected'
+  ).length,
+
+  activeSellers: users.filter(
+    u => u.role === 'seller' && u.active
+  ).length
+};
 
       return sendJson(res, 200, { stats });
     }
@@ -639,8 +662,28 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 404, { error: 'Encuesta no encontrada' });
       }
 
-      if (body.status !== undefined) survey.status = body.status;
-      if (body.adminNotes !== undefined) survey.adminNotes = body.adminNotes;
+      const allowedStatuses = [
+  'pending',
+  'confirmed',
+  'paid',
+  'rejected'
+];
+
+if (body.status !== undefined) {
+  const nextStatus = String(body.status).trim();
+
+  if (!allowedStatuses.includes(nextStatus)) {
+    return sendJson(res, 400, {
+      error: 'Estado de venta inválido'
+    });
+  }
+
+  survey.status = nextStatus;
+}
+
+if (body.adminNotes !== undefined) {
+  survey.adminNotes = body.adminNotes;
+}
 
       if (body.holderName !== undefined) survey.holderName = body.holderName;
       if (body.cuil !== undefined) survey.cuil = body.cuil;
@@ -665,9 +708,13 @@ const server = http.createServer(async (req, res) => {
       if (body.dniFrontData !== undefined) survey.dniFrontData = body.dniFrontData;
       if (body.dniBackName !== undefined) survey.dniBackName = body.dniBackName;
       if (body.dniBackData !== undefined) survey.dniBackData = body.dniBackData;
-      if (body.observations !== undefined) survey.observations = body.observations;
+      if (body.observations !== undefined) {
+  survey.observations = body.observations;
+}
 
-      saveSurveys(surveys);
+survey.updatedAt = new Date().toISOString();
+
+saveSurveys(surveys);
 
       return sendJson(res, 200, { message: 'Encuesta actualizada correctamente' });
     }

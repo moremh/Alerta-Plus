@@ -74,6 +74,7 @@ function roleLabel(role) {
 
 function statusLabel(status) {
   if (status === 'confirmed') return 'Aprobada';
+  if (status === 'paid') return 'Aprobado Abonado';
   if (status === 'rejected') return 'Rechazada';
   return 'Pendiente';
 }
@@ -82,6 +83,7 @@ function statusBadge(status) {
   const map = {
     pending: 'badge badge-pending',
     confirmed: 'badge badge-confirmed',
+    paid: 'badge badge-paid',
     rejected: 'badge badge-rejected'
   };
 
@@ -764,6 +766,11 @@ async function renderDashboard(user) {
     ? surveysData.surveys
     : surveysData.surveys.filter(s => s.sellerId === user.id);
 
+  const pendingCount = surveys.filter(s => s.status === 'pending').length;
+  const confirmedCount = surveys.filter(s => s.status === 'confirmed').length;
+  const paidCount = surveys.filter(s => s.status === 'paid').length;
+  const rejectedCount = surveys.filter(s => s.status === 'rejected').length;
+
   const recentSurveys = [...surveys]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, 5);
@@ -779,14 +786,20 @@ async function renderDashboard(user) {
         <div class="stats-grid">
           <div class="stat-card">
             <h3>Ventas en Central</h3>
-            <p class="stat-number">${stats.pending}</p>
+            <p class="stat-number">${pendingCount}</p>
             <div class="stat-meta">Pendientes de revisión</div>
           </div>
 
           <div class="stat-card">
             <h3>Ventas Aprobadas</h3>
-            <p class="stat-number">${stats.confirmed}</p>
-            <div class="stat-meta">En el sistema</div>
+            <p class="stat-number">${confirmedCount}</p>
+            <div class="stat-meta">Aprobadas sin abonar</div>
+          </div>
+
+          <div class="stat-card">
+            <h3>Aprobado Abonado</h3>
+            <p class="stat-number">${paidCount}</p>
+            <div class="stat-meta">Ventas aprobadas y abonadas</div>
           </div>
 
           <div class="stat-card">
@@ -821,22 +834,44 @@ async function renderDashboard(user) {
                   <th>Acciones</th>
                 </tr>
               </thead>
+
               <tbody>
                 ${recentSurveys.map(s => `
                   <tr>
                     <td>${formatDate(s.createdAt)}</td>
                     <td>${s.sellerName}</td>
+
                     <td>
                       <div>${s.holderName}</div>
                       <div class="muted">${s.phone1 || '-'}</div>
                     </td>
+
                     <td>${s.equipment}</td>
-                    <td>${s.dniFrontData && s.dniBackData ? 'Completa' : 'Incompleta'}</td>
+
+                    <td>
+                      ${s.dniFrontData && s.dniBackData
+                        ? 'Completa'
+                        : 'Incompleta'
+                      }
+                    </td>
+
                     <td>${statusBadge(s.status)}</td>
+
                     <td>
                       <div class="btn-row">
-                        <button class="btn btn-outline" onclick="viewSurveyDetail(${s.id})">Ver</button>
-                        <button class="btn btn-secondary" onclick="changeSurveyStatus(${s.id})">Editar</button>
+                        <button
+                          class="btn btn-outline"
+                          onclick="viewSurveyDetail(${s.id})"
+                        >
+                          Ver
+                        </button>
+
+                        <button
+                          class="btn btn-secondary"
+                          onclick="changeSurveyStatus(${s.id})"
+                        >
+                          Editar
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -848,8 +883,14 @@ async function renderDashboard(user) {
       `
     });
 
-    document.getElementById('manageUsersBtn').onclick = () => renderAdminPanel(user);
-    document.getElementById('openCentralBtn').onclick = () => renderAdminSurveys();
+    document.getElementById('manageUsersBtn').onclick = () => {
+      renderAdminPanel(user);
+    };
+
+    document.getElementById('openCentralBtn').onclick = () => {
+      renderAdminSurveys();
+    };
+
     return;
   }
 
@@ -868,19 +909,25 @@ async function renderDashboard(user) {
 
         <div class="stat-card">
           <h3>Aprobadas</h3>
-          <p class="stat-number">${stats.confirmed}</p>
-          <div class="stat-meta">Este mes</div>
+          <p class="stat-number">${confirmedCount}</p>
+          <div class="stat-meta">Aprobadas sin abonar</div>
+        </div>
+
+        <div class="stat-card">
+          <h3>Aprobado Abonado</h3>
+          <p class="stat-number">${paidCount}</p>
+          <div class="stat-meta">Aprobadas y abonadas</div>
         </div>
 
         <div class="stat-card">
           <h3>Pendientes</h3>
-          <p class="stat-number">${stats.pending}</p>
+          <p class="stat-number">${pendingCount}</p>
           <div class="stat-meta">En revisión</div>
         </div>
 
         <div class="stat-card">
           <h3>Rechazadas</h3>
-          <p class="stat-number">${stats.rejected}</p>
+          <p class="stat-number">${rejectedCount}</p>
           <div class="stat-meta">Este mes</div>
         </div>
       </div>
@@ -893,19 +940,35 @@ async function renderDashboard(user) {
         <div class="card">
           <div class="card-header">
             <h2>Últimas ventas</h2>
-            <button class="btn btn-secondary" id="viewAllSellerSalesBtn">Ver todas</button>
+
+            <button
+              class="btn btn-secondary"
+              id="viewAllSellerSalesBtn"
+            >
+              Ver todas
+            </button>
           </div>
 
           <div class="list">
             ${recentSurveys.map(s => `
               <div class="list-item">
                 <div class="avatar">${getInitials(s.holderName)}</div>
+
                 <div>
-                  <div style="font-weight:700;">${s.holderName}</div>
-                  <div class="muted">${s.equipment}</div>
+                  <div style="font-weight:700;">
+                    ${s.holderName}
+                  </div>
+
+                  <div class="muted">
+                    ${s.equipment}
+                  </div>
                 </div>
+
                 <div>${statusBadge(s.status)}</div>
-                <div class="muted">${formatDate(s.createdAt)}</div>
+
+                <div class="muted">
+                  ${formatDate(s.createdAt)}
+                </div>
               </div>
             `).join('')}
           </div>
@@ -915,9 +978,21 @@ async function renderDashboard(user) {
       <div class="card">
         <div class="card-header">
           <h2>Mis ventas</h2>
+
           <div class="toolbar-right">
-            <button class="btn btn-secondary" id="openFiltersBtn">Filtros</button>
-            <button class="btn btn-primary" id="newSaleFromDashboardBtn">Nueva Venta</button>
+            <button
+              class="btn btn-secondary"
+              id="openFiltersBtn"
+            >
+              Filtros
+            </button>
+
+            <button
+              class="btn btn-primary"
+              id="newSaleFromDashboardBtn"
+            >
+              Nueva Venta
+            </button>
           </div>
         </div>
 
@@ -933,6 +1008,7 @@ async function renderDashboard(user) {
                 <th>Acciones</th>
               </tr>
             </thead>
+
             <tbody>
               ${recentSurveys.map(s => `
                 <tr>
@@ -941,12 +1017,27 @@ async function renderDashboard(user) {
                   <td>${formatDate(s.createdAt)}</td>
                   <td>${statusBadge(s.status)}</td>
                   <td>${formatDateTime(s.createdAt)}</td>
+
                   <td>
                     <div class="btn-row">
-                      <button class="btn btn-outline" onclick="viewSurveyDetail(${s.id})">Ver</button>
-                      ${s.status === 'pending'
-                        ? `<button class="btn btn-secondary" onclick="editSurvey(${s.id})">Editar</button>`
-                        : ''
+                      <button
+                        class="btn btn-outline"
+                        onclick="viewSurveyDetail(${s.id})"
+                      >
+                        Ver
+                      </button>
+
+                      ${
+                        s.status === 'pending'
+                          ? `
+                            <button
+                              class="btn btn-secondary"
+                              onclick="editSurvey(${s.id})"
+                            >
+                              Editar
+                            </button>
+                          `
+                          : ''
                       }
                     </div>
                   </td>
@@ -959,9 +1050,17 @@ async function renderDashboard(user) {
     `
   });
 
-  document.getElementById('viewAllSellerSalesBtn').onclick = () => renderSellerSurveys(user);
-  document.getElementById('newSaleFromDashboardBtn').onclick = () => renderSurveyForm(user);
-  document.getElementById('openFiltersBtn').onclick = () => renderSellerSurveys(user);
+  document.getElementById('viewAllSellerSalesBtn').onclick = () => {
+    renderSellerSurveys(user);
+  };
+
+  document.getElementById('newSaleFromDashboardBtn').onclick = () => {
+    renderSurveyForm(user);
+  };
+
+  document.getElementById('openFiltersBtn').onclick = () => {
+    renderSellerSurveys(user);
+  };
 }
 
 async function renderAdminPanel(user) {
@@ -1254,11 +1353,14 @@ async function renderAdminSurveys() {
     }
 
     if (currentSeller) {
-      filtered = filtered.filter(s => s.sellerName === currentSeller);
+      filtered = filtered.filter(
+        s => s.sellerName === currentSeller
+      );
     }
 
     if (currentSearch) {
       const q = currentSearch.toLowerCase();
+
       filtered = filtered.filter(s =>
         String(s.holderName || '').toLowerCase().includes(q) ||
         String(s.sellerName || '').toLowerCase().includes(q) ||
@@ -1275,40 +1377,82 @@ async function renderAdminSurveys() {
     const filtered = getFilteredSurveys();
 
     const total = filtered.length;
-    const pending = filtered.filter(s => s.status === 'pending').length;
-    const confirmed = filtered.filter(s => s.status === 'confirmed').length;
-    const rejected = filtered.filter(s => s.status === 'rejected').length;
+
+    const pending = filtered.filter(
+      s => s.status === 'pending'
+    ).length;
+
+    const confirmed = filtered.filter(
+      s => s.status === 'confirmed'
+    ).length;
+
+    const paid = filtered.filter(
+      s => s.status === 'paid'
+    ).length;
+
+    const rejected = filtered.filter(
+      s => s.status === 'rejected'
+    ).length;
 
     renderAppShell({
       user: sessionUser,
       active: 'centralSales',
       title: 'Ventas en Central',
       subtitle: 'Revisión y seguimiento de ventas enviadas por vendedores.',
+
       extraActions: `
-        <button class="btn btn-secondary" id="goDashboardBtn">Panel de Control</button>
-        <button class="btn btn-primary" id="goVendorsBtn">Gestionar Vendedores</button>
+        <button
+          class="btn btn-secondary"
+          id="goDashboardBtn"
+        >
+          Panel de Control
+        </button>
+
+        <button
+          class="btn btn-primary"
+          id="goVendorsBtn"
+        >
+          Gestionar Vendedores
+        </button>
       `,
+
       content: `
         <div class="stats-grid admin-stats-grid">
-          <div class="stat-card mini-stat-card ${currentStatus === 'all' ? 'active-stat' : ''}">
+          <div class="stat-card mini-stat-card ${
+            currentStatus === 'all' ? 'active-stat' : ''
+          }">
             <h3>Todas</h3>
             <p class="stat-number">${total}</p>
             <div class="stat-meta">Ventas visibles</div>
           </div>
 
-          <div class="stat-card mini-stat-card ${currentStatus === 'pending' ? 'active-stat' : ''}">
+          <div class="stat-card mini-stat-card ${
+            currentStatus === 'pending' ? 'active-stat' : ''
+          }">
             <h3>Pendientes</h3>
             <p class="stat-number">${pending}</p>
             <div class="stat-meta">En revisión</div>
           </div>
 
-          <div class="stat-card mini-stat-card ${currentStatus === 'confirmed' ? 'active-stat' : ''}">
+          <div class="stat-card mini-stat-card ${
+            currentStatus === 'confirmed' ? 'active-stat' : ''
+          }">
             <h3>Aprobadas</h3>
             <p class="stat-number">${confirmed}</p>
-            <div class="stat-meta">Validadas</div>
+            <div class="stat-meta">Validadas sin abonar</div>
           </div>
 
-          <div class="stat-card mini-stat-card ${currentStatus === 'rejected' ? 'active-stat' : ''}">
+          <div class="stat-card mini-stat-card ${
+            currentStatus === 'paid' ? 'active-stat' : ''
+          }">
+            <h3>Aprobado Abonado</h3>
+            <p class="stat-number">${paid}</p>
+            <div class="stat-meta">Ventas abonadas</div>
+          </div>
+
+          <div class="stat-card mini-stat-card ${
+            currentStatus === 'rejected' ? 'active-stat' : ''
+          }">
             <h3>Rechazadas</h3>
             <p class="stat-number">${rejected}</p>
             <div class="stat-meta">Observadas</div>
@@ -1318,18 +1462,62 @@ async function renderAdminSurveys() {
         <div class="card">
           <div class="toolbar">
             <div class="tabs">
-              <button class="tab ${currentStatus === 'all' ? 'active' : ''}" data-admin-status="all">Todas</button>
-              <button class="tab ${currentStatus === 'pending' ? 'active' : ''}" data-admin-status="pending">Pendientes</button>
-              <button class="tab ${currentStatus === 'confirmed' ? 'active' : ''}" data-admin-status="confirmed">Aprobadas</button>
-              <button class="tab ${currentStatus === 'rejected' ? 'active' : ''}" data-admin-status="rejected">Rechazadas</button>
+              <button
+                class="tab ${currentStatus === 'all' ? 'active' : ''}"
+                data-admin-status="all"
+              >
+                Todas
+              </button>
+
+              <button
+                class="tab ${currentStatus === 'pending' ? 'active' : ''}"
+                data-admin-status="pending"
+              >
+                Pendientes
+              </button>
+
+              <button
+                class="tab ${currentStatus === 'confirmed' ? 'active' : ''}"
+                data-admin-status="confirmed"
+              >
+                Aprobadas
+              </button>
+
+              <button
+                class="tab ${currentStatus === 'paid' ? 'active' : ''}"
+                data-admin-status="paid"
+              >
+                Aprobado Abonado
+              </button>
+
+              <button
+                class="tab ${currentStatus === 'rejected' ? 'active' : ''}"
+                data-admin-status="rejected"
+              >
+                Rechazadas
+              </button>
             </div>
 
             <div class="toolbar-right">
-              <select class="select" id="adminSellerFilter" style="min-width:220px;">
-                <option value="">Todos los vendedores</option>
+              <select
+                class="select"
+                id="adminSellerFilter"
+                style="min-width:220px;"
+              >
+                <option value="">
+                  Todos los vendedores
+                </option>
+
                 ${usersData.users
                   .filter(u => u.role === 'seller')
-                  .map(u => `<option value="${u.name}" ${currentSeller === u.name ? 'selected' : ''}>${u.name}</option>`)
+                  .map(u => `
+                    <option
+                      value="${u.name}"
+                      ${currentSeller === u.name ? 'selected' : ''}
+                    >
+                      ${u.name}
+                    </option>
+                  `)
                   .join('')}
               </select>
 
@@ -1340,7 +1528,12 @@ async function renderAdminSurveys() {
                 value="${currentSearch}"
               >
 
-              <button class="btn btn-secondary" id="resetAdminFiltersBtn">Limpiar</button>
+              <button
+                class="btn btn-secondary"
+                id="resetAdminFiltersBtn"
+              >
+                Limpiar
+              </button>
             </div>
           </div>
 
@@ -1357,21 +1550,30 @@ async function renderAdminSurveys() {
                   <th>Acciones</th>
                 </tr>
               </thead>
+
               <tbody id="adminSalesTableBody">
                 ${buildAdminSalesRowsPro(filtered)}
               </tbody>
             </table>
           </div>
 
-          <div class="mobile-sales-list" id="adminSalesCards">
+          <div
+            class="mobile-sales-list"
+            id="adminSalesCards"
+          >
             ${buildAdminSalesCards(filtered)}
           </div>
         </div>
       `
     });
 
-    document.getElementById('goDashboardBtn').onclick = () => renderDashboard(sessionUser);
-    document.getElementById('goVendorsBtn').onclick = () => renderAdminPanel(sessionUser);
+    document.getElementById('goDashboardBtn').onclick = () => {
+      renderDashboard(sessionUser);
+    };
+
+    document.getElementById('goVendorsBtn').onclick = () => {
+      renderAdminPanel(sessionUser);
+    };
 
     document.querySelectorAll('[data-admin-status]').forEach(btn => {
       btn.onclick = () => {
@@ -1387,9 +1589,14 @@ async function renderAdminSurveys() {
 
     document.getElementById('adminSalesSearch').oninput = (e) => {
       currentSearch = e.target.value.trim();
+
       const filteredNow = getFilteredSurveys();
-      document.getElementById('adminSalesTableBody').innerHTML = buildAdminSalesRowsPro(filteredNow);
-      document.getElementById('adminSalesCards').innerHTML = buildAdminSalesCards(filteredNow);
+
+      document.getElementById('adminSalesTableBody').innerHTML =
+        buildAdminSalesRowsPro(filteredNow);
+
+      document.getElementById('adminSalesCards').innerHTML =
+        buildAdminSalesCards(filteredNow);
     };
 
     document.getElementById('resetAdminFiltersBtn').onclick = () => {
@@ -1695,16 +1902,38 @@ async function renderSellerSurveys(user) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const total = mySurveys.length;
-  const pending = mySurveys.filter(s => s.status === 'pending').length;
-  const confirmed = mySurveys.filter(s => s.status === 'confirmed').length;
-  const rejected = mySurveys.filter(s => s.status === 'rejected').length;
+
+  const pending = mySurveys.filter(
+    s => s.status === 'pending'
+  ).length;
+
+  const confirmed = mySurveys.filter(
+    s => s.status === 'confirmed'
+  ).length;
+
+  const paid = mySurveys.filter(
+    s => s.status === 'paid'
+  ).length;
+
+  const rejected = mySurveys.filter(
+    s => s.status === 'rejected'
+  ).length;
 
   renderAppShell({
     user,
     active: 'mySales',
     title: 'Mis Ventas',
     subtitle: 'Consultá todas las ventas que registraste',
-    extraActions: `<button class="btn btn-primary" id="newSaleTopBtn">Nueva Venta</button>`,
+
+    extraActions: `
+      <button
+        class="btn btn-primary"
+        id="newSaleTopBtn"
+      >
+        Nueva Venta
+      </button>
+    `,
+
     content: `
       <div class="stats-grid seller-stats-grid">
         <div class="stat-card mini-stat-card active-stat">
@@ -1723,6 +1952,11 @@ async function renderSellerSurveys(user) {
         </div>
 
         <div class="stat-card mini-stat-card">
+          <h3>Aprobado Abonado</h3>
+          <p class="stat-number">${paid}</p>
+        </div>
+
+        <div class="stat-card mini-stat-card">
           <h3>Rechazadas</h3>
           <p class="stat-number">${rejected}</p>
         </div>
@@ -1731,15 +1965,55 @@ async function renderSellerSurveys(user) {
       <div class="card">
         <div class="toolbar">
           <div class="tabs">
-            <button class="tab active" data-filter="all">Todas</button>
-            <button class="tab" data-filter="pending">Pendientes</button>
-            <button class="tab" data-filter="confirmed">Aprobadas</button>
-            <button class="tab" data-filter="rejected">Rechazadas</button>
+            <button
+              class="tab active"
+              data-filter="all"
+            >
+              Todas
+            </button>
+
+            <button
+              class="tab"
+              data-filter="pending"
+            >
+              Pendientes
+            </button>
+
+            <button
+              class="tab"
+              data-filter="confirmed"
+            >
+              Aprobadas
+            </button>
+
+            <button
+              class="tab"
+              data-filter="paid"
+            >
+              Aprobado Abonado
+            </button>
+
+            <button
+              class="tab"
+              data-filter="rejected"
+            >
+              Rechazadas
+            </button>
           </div>
 
           <div class="toolbar-right">
-            <input class="input search" id="salesSearchInput" placeholder="Buscar por cliente, CUIL o ciudad...">
-            <button class="btn btn-secondary" id="refreshSalesBtn">Actualizar</button>
+            <input
+              class="input search"
+              id="salesSearchInput"
+              placeholder="Buscar por cliente, CUIL o ciudad..."
+            >
+
+            <button
+              class="btn btn-secondary"
+              id="refreshSalesBtn"
+            >
+              Actualizar
+            </button>
           </div>
         </div>
 
@@ -1755,21 +2029,30 @@ async function renderSellerSurveys(user) {
                 <th>Acciones</th>
               </tr>
             </thead>
+
             <tbody id="sellerSalesTableBody">
               ${buildSellerSalesRowsPro(mySurveys)}
             </tbody>
           </table>
         </div>
 
-        <div class="mobile-sales-list" id="sellerSalesCards">
+        <div
+          class="mobile-sales-list"
+          id="sellerSalesCards"
+        >
           ${buildSellerSalesCards(mySurveys)}
         </div>
       </div>
     `
   });
 
-  document.getElementById('newSaleTopBtn').onclick = () => renderSurveyForm(user);
-  document.getElementById('refreshSalesBtn').onclick = () => renderSellerSurveys(user);
+  document.getElementById('newSaleTopBtn').onclick = () => {
+    renderSurveyForm(user);
+  };
+
+  document.getElementById('refreshSalesBtn').onclick = () => {
+    renderSellerSurveys(user);
+  };
 
   let currentFilter = 'all';
   let currentSearch = '';
@@ -1778,11 +2061,14 @@ async function renderSellerSurveys(user) {
     let filtered = [...mySurveys];
 
     if (currentFilter !== 'all') {
-      filtered = filtered.filter(s => s.status === currentFilter);
+      filtered = filtered.filter(
+        s => s.status === currentFilter
+      );
     }
 
     if (currentSearch) {
       const q = currentSearch.toLowerCase();
+
       filtered = filtered.filter(s =>
         String(s.holderName || '').toLowerCase().includes(q) ||
         String(s.cuil || '').toLowerCase().includes(q) ||
@@ -1791,15 +2077,23 @@ async function renderSellerSurveys(user) {
       );
     }
 
-    document.getElementById('sellerSalesTableBody').innerHTML = buildSellerSalesRowsPro(filtered);
-    document.getElementById('sellerSalesCards').innerHTML = buildSellerSalesCards(filtered);
+    document.getElementById('sellerSalesTableBody').innerHTML =
+      buildSellerSalesRowsPro(filtered);
+
+    document.getElementById('sellerSalesCards').innerHTML =
+      buildSellerSalesCards(filtered);
   }
 
   document.querySelectorAll('[data-filter]').forEach(btn => {
     btn.onclick = () => {
-      document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('[data-filter]').forEach(button => {
+        button.classList.remove('active');
+      });
+
       btn.classList.add('active');
+
       currentFilter = btn.dataset.filter;
+
       applyFilters();
     };
   });
@@ -1812,13 +2106,14 @@ async function renderSellerSurveys(user) {
 
 function renderProfile(user) {
   fetch(`/api/stats?userId=${user.id}&role=${user.role}`)
-    .then(r => r.json())
+    .then(res => res.json())
     .then(({ stats }) => {
       renderAppShell({
         user,
         active: 'profile',
         title: 'Mi Perfil',
         subtitle: 'Gestioná tu información personal.',
+
         content: `
           <div class="profile-grid">
             <div class="card">
@@ -1826,19 +2121,63 @@ function renderProfile(user) {
                 <h2>Información Personal</h2>
               </div>
 
-              <div style="display:flex; gap:18px; align-items:flex-start; margin-bottom:18px;">
-                <div class="avatar" style="width:64px;height:64px;font-size:22px;">${getInitials(user.name)}</div>
+              <div
+                style="
+                  display:flex;
+                  gap:18px;
+                  align-items:flex-start;
+                  margin-bottom:18px;
+                "
+              >
+                <div
+                  class="avatar"
+                  style="
+                    width:64px;
+                    height:64px;
+                    font-size:22px;
+                  "
+                >
+                  ${getInitials(user.name)}
+                </div>
+
                 <div>
-                  <div style="font-size:22px; font-weight:800;">${user.name}</div>
-                  <div class="muted">${roleLabel(user.role)}</div>
+                  <div style="font-size:22px; font-weight:800;">
+                    ${user.name}
+                  </div>
+
+                  <div class="muted">
+                    ${roleLabel(user.role)}
+                  </div>
                 </div>
               </div>
 
               <div class="info-list">
-                <div class="info-row"><div>Usuario</div><div>${user.username}</div></div>
-                <div class="info-row"><div>Rol</div><div>${roleLabel(user.role)}</div></div>
-                <div class="info-row"><div>Tema actual</div><div>${user.theme === 'dark' ? 'Oscuro' : 'Claro'}</div></div>
-                <div class="info-row"><div>Estado</div><div><span class="badge badge-confirmed">Activo</span></div></div>
+                <div class="info-row">
+                  <div>Usuario</div>
+                  <div>${user.username}</div>
+                </div>
+
+                <div class="info-row">
+                  <div>Rol</div>
+                  <div>${roleLabel(user.role)}</div>
+                </div>
+
+                <div class="info-row">
+                  <div>Tema actual</div>
+                  <div>
+                    ${user.theme === 'dark' ? 'Oscuro' : 'Claro'}
+                  </div>
+                </div>
+
+                <div class="info-row">
+                  <div>Estado</div>
+
+                  <div>
+                    <span class="badge badge-confirmed">
+                      Activo
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1848,21 +2187,52 @@ function renderProfile(user) {
               </div>
 
               <div class="info-list">
-                <div class="info-row"><div>Total de ventas</div><div>${stats.total}</div></div>
-                <div class="info-row"><div>Ventas aprobadas</div><div>${stats.confirmed}</div></div>
-                <div class="info-row"><div>Ventas pendientes</div><div>${stats.pending}</div></div>
-                <div class="info-row"><div>Ventas rechazadas</div><div>${stats.rejected}</div></div>
+                <div class="info-row">
+                  <div>Total de ventas</div>
+                  <div>${stats.total}</div>
+                </div>
+
+                <div class="info-row">
+                  <div>Ventas aprobadas</div>
+                  <div>${stats.confirmed}</div>
+                </div>
+
+                <div class="info-row">
+                  <div>Aprobado Abonado</div>
+                  <div>${stats.paid || 0}</div>
+                </div>
+
+                <div class="info-row">
+                  <div>Ventas pendientes</div>
+                  <div>${stats.pending}</div>
+                </div>
+
+                <div class="info-row">
+                  <div>Ventas rechazadas</div>
+                  <div>${stats.rejected}</div>
+                </div>
               </div>
 
               <div class="btn-row" style="margin-top:16px;">
-                <button class="btn btn-primary" id="goProfileSettingsBtn">Editar información</button>
+                <button
+                  class="btn btn-primary"
+                  id="goProfileSettingsBtn"
+                >
+                  Editar información
+                </button>
               </div>
             </div>
           </div>
         `
       });
 
-      document.getElementById('goProfileSettingsBtn').onclick = () => renderSettings(user);
+      document.getElementById('goProfileSettingsBtn').onclick = () => {
+        renderSettings(user);
+      };
+    })
+    .catch(error => {
+      console.error('Error cargando el perfil:', error);
+      alert('No se pudo cargar la información del perfil');
     });
 }
 
@@ -1987,10 +2357,15 @@ function closeStatusModal() {
   if (modal) modal.remove();
 }
 
-function openStatusModal({ currentStatus = 'pending', currentNotes = '', onSave }) {
+function openStatusModal({
+  currentStatus = 'pending',
+  currentNotes = '',
+  onSave
+}) {
   closeStatusModal();
 
   const overlay = document.createElement('div');
+
   overlay.id = 'statusModalOverlay';
   overlay.className = 'modal-overlay';
 
@@ -1999,45 +2374,121 @@ function openStatusModal({ currentStatus = 'pending', currentNotes = '', onSave 
       <div class="modal-header">
         <div>
           <h3>Cambiar estado de la venta</h3>
-          <p>Actualizá el estado y agregá una observación si hace falta.</p>
+          <p>
+            Actualizá el estado y agregá una observación si hace falta.
+          </p>
         </div>
-        <button class="modal-close-btn" id="closeStatusModalBtn">✕</button>
+
+        <button
+          class="modal-close-btn"
+          id="closeStatusModalBtn"
+        >
+          ✕
+        </button>
       </div>
 
       <div class="field">
         <label>Estado</label>
-        <select class="select" id="statusSelect">
-          <option value="pending" ${currentStatus === 'pending' ? 'selected' : ''}>Pendiente</option>
-          <option value="confirmed" ${currentStatus === 'confirmed' ? 'selected' : ''}>Aprobada</option>
-          <option value="rejected" ${currentStatus === 'rejected' ? 'selected' : ''}>Rechazada</option>
+
+        <select
+          class="select"
+          id="statusSelect"
+        >
+          <option
+            value="pending"
+            ${currentStatus === 'pending' ? 'selected' : ''}
+          >
+            Pendiente
+          </option>
+
+          <option
+            value="confirmed"
+            ${currentStatus === 'confirmed' ? 'selected' : ''}
+          >
+            Aprobada
+          </option>
+
+          <option
+            value="paid"
+            ${currentStatus === 'paid' ? 'selected' : ''}
+          >
+            Aprobado Abonado
+          </option>
+
+          <option
+            value="rejected"
+            ${currentStatus === 'rejected' ? 'selected' : ''}
+          >
+            Rechazada
+          </option>
         </select>
       </div>
 
       <div class="field">
         <label>Observaciones de jefatura</label>
-        <textarea class="textarea" id="statusNotes" placeholder="Escribí una observación opcional...">${currentNotes}</textarea>
+
+        <textarea
+          class="textarea"
+          id="statusNotes"
+          placeholder="Escribí una observación opcional..."
+        >${currentNotes}</textarea>
       </div>
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="cancelStatusModalBtn">Cancelar</button>
-        <button class="btn btn-primary" id="saveStatusModalBtn">Guardar cambios</button>
+        <button
+          class="btn btn-secondary"
+          id="cancelStatusModalBtn"
+        >
+          Cancelar
+        </button>
+
+        <button
+          class="btn btn-primary"
+          id="saveStatusModalBtn"
+        >
+          Guardar cambios
+        </button>
       </div>
     </div>
   `;
 
   document.body.appendChild(overlay);
 
-  document.getElementById('closeStatusModalBtn').onclick = closeStatusModal;
-  document.getElementById('cancelStatusModalBtn').onclick = closeStatusModal;
+  document.getElementById('closeStatusModalBtn').onclick =
+    closeStatusModal;
 
-  overlay.onclick = (e) => {
-    if (e.target === overlay) closeStatusModal();
+  document.getElementById('cancelStatusModalBtn').onclick =
+    closeStatusModal;
+
+  overlay.onclick = (event) => {
+    if (event.target === overlay) {
+      closeStatusModal();
+    }
   };
 
   document.getElementById('saveStatusModalBtn').onclick = async () => {
-    const status = document.getElementById('statusSelect').value;
-    const notes = document.getElementById('statusNotes').value.trim();
-    await onSave({ status, notes });
+    const saveButton =
+      document.getElementById('saveStatusModalBtn');
+
+    const status =
+      document.getElementById('statusSelect').value;
+
+    const notes =
+      document.getElementById('statusNotes').value.trim();
+
+    saveButton.disabled = true;
+    saveButton.textContent = 'Guardando...';
+
+    try {
+      await onSave({ status, notes });
+    } catch (error) {
+      console.error('Error guardando el estado:', error);
+
+      saveButton.disabled = false;
+      saveButton.textContent = 'Guardar cambios';
+
+      alert('No se pudo guardar el nuevo estado');
+    }
   };
 }
 
@@ -2437,7 +2888,7 @@ window.viewSurveyDetail = async function(id) {
                 </div>
 
                 <div class="timeline-item-pro ${
-                  survey.status === 'confirmed' ? 'done' : ''
+                  ['confirmed', 'paid'].includes(survey.status) ? 'done' : ''
                 }">
                   <div class="timeline-dot-pro"></div>
 
@@ -2445,10 +2896,12 @@ window.viewSurveyDetail = async function(id) {
                     <strong>Venta aprobada</strong>
                     <div class="muted">
                       ${
-                        survey.status === 'confirmed'
-                          ? 'Aprobada por jefatura'
-                          : 'Todavía no aprobada'
-                      }
+  survey.status === 'paid'
+    ? 'Aprobada y abonada'
+    : survey.status === 'confirmed'
+      ? 'Aprobada por jefatura'
+      : 'Todavía no aprobada'
+}
                     </div>
                   </div>
                 </div>
