@@ -1349,34 +1349,70 @@ function buildAdminSalesRowsPro(sales) {
   return sales.map(s => `
     <tr>
       <td>${formatDate(s.createdAt)}</td>
+
       <td>
-        <div style="font-weight:700;">${s.sellerName || '-'}</div>
-        <div class="muted">ID: ${s.sellerId || '-'}</div>
+        <div style="font-weight:700;">
+          ${s.sellerName || '-'}
+        </div>
+        <div class="muted">
+          ID: ${s.sellerId || '-'}
+        </div>
       </td>
+
       <td>
-        <div style="font-weight:700;">${s.holderName || '-'}</div>
-        <div class="muted">${s.phone1 || '-'}</div>
+        <div style="font-weight:700;">
+          ${s.holderName || '-'}
+        </div>
+        <div class="muted">
+          ${s.phone1 || '-'}
+        </div>
       </td>
+
       <td>
         <div>${s.equipment || '-'}</div>
         <div class="muted">${s.bonus || '-'}</div>
       </td>
+
       <td>
-        ${s.dniFrontData && s.dniBackData
-          ? '<span class="badge badge-confirmed">Completa</span>'
-          : '<span class="badge badge-pending">Incompleta</span>'
+        ${
+          s.dniFrontData && s.dniBackData
+            ? '<span class="badge badge-confirmed">Completa</span>'
+            : '<span class="badge badge-pending">Incompleta</span>'
         }
       </td>
-      <td>${statusBadge(s.status)}</td>
+
+      <td>
+        ${statusBadge(s.status)}
+      </td>
+
       <td>
         <div class="btn-row">
-          <button class="btn btn-outline" onclick="viewSurveyDetail(${s.id})">Ver</button>
-          <button class="btn btn-secondary" onclick="changeSurveyStatus(${s.id})">Estado</button>
+          <button
+            class="btn btn-outline"
+            onclick="viewSurveyDetail(${s.id})"
+          >
+            Ver
+          </button>
+
+          <button
+            class="btn btn-secondary"
+            onclick="changeSurveyStatus(${s.id})"
+          >
+            Estado
+          </button>
+
+          <button
+            class="btn btn-danger"
+            onclick="deleteSurvey(${s.id})"
+          >
+            Eliminar
+          </button>
         </div>
       </td>
     </tr>
   `).join('');
 }
+
 
 function buildSellerSalesRowsPro(sales) {
   if (!sales.length) {
@@ -1392,88 +1428,246 @@ function buildSellerSalesRowsPro(sales) {
   return sales.map(s => `
     <tr>
       <td>
-        <div style="font-weight:700;">${s.holderName || '-'}</div>
-        <div class="muted">${s.cuil || '-'}</div>
+        <div style="font-weight:700;">
+          ${s.holderName || '-'}
+        </div>
+        <div class="muted">
+          ${s.cuil || '-'}
+        </div>
       </td>
+
       <td>
         <div>${s.equipment || '-'}</div>
         <div class="muted">${s.bonus || '-'}</div>
       </td>
-      <td>${formatDate(s.createdAt)}</td>
-      <td>${statusBadge(s.status)}</td>
-      <td>${formatDateTime(s.createdAt)}</td>
+
+      <td>
+        ${formatDate(s.createdAt)}
+      </td>
+
+      <td>
+        ${statusBadge(s.status)}
+      </td>
+
+      <td>
+        ${formatDateTime(
+          s.updatedAt || s.createdAt
+        )}
+      </td>
+
       <td>
         <div class="btn-row">
-          <button class="btn btn-outline" onclick="viewSurveyDetail(${s.id})">Ver</button>
-          ${s.status === 'pending'
-            ? `<button class="btn btn-secondary" onclick="editSurvey(${s.id})">Editar</button>`
-            : ''
+          <button
+            class="btn btn-outline"
+            onclick="viewSurveyDetail(${s.id})"
+          >
+            Ver
+          </button>
+
+          ${
+            s.status === 'pending'
+              ? `
+                <button
+                  class="btn btn-secondary"
+                  onclick="editSurvey(${s.id})"
+                >
+                  Editar
+                </button>
+              `
+              : ''
           }
+
+          <button
+            class="btn btn-danger"
+            onclick="deleteSurvey(${s.id})"
+          >
+            Eliminar
+          </button>
         </div>
       </td>
     </tr>
   `).join('');
 }
 
+
 function buildSellerSalesCards(sales) {
   if (!sales.length) {
-    return `<div class="empty">No hay ventas para mostrar.</div>`;
+    return `
+      <div class="empty">
+        No hay ventas para mostrar.
+      </div>
+    `;
   }
 
   return sales.map(s => `
     <div class="sale-card-mobile">
+
       <div class="sale-card-mobile-header">
         <div>
-          <div class="sale-card-mobile-title">${s.holderName || '-'}</div>
-          <div class="sale-card-mobile-sub">${s.cuil || '-'}</div>
+          <div class="sale-card-mobile-title">
+            ${s.holderName || '-'}
+          </div>
+
+          <div class="sale-card-mobile-sub">
+            ${s.cuil || '-'}
+          </div>
         </div>
-        <div>${statusBadge(s.status)}</div>
+
+        <div>
+          ${statusBadge(s.status)}
+        </div>
       </div>
 
       <div class="sale-card-mobile-grid">
-        <div><span>Equipo</span><strong>${s.equipment || '-'}</strong></div>
-        <div><span>Promoción</span><strong>${s.bonus || '-'}</strong></div>
-        <div><span>Fecha</span><strong>${formatDate(s.createdAt)}</strong></div>
-        <div><span>Ciudad</span><strong>${s.city || '-'}</strong></div>
+        <div>
+          <span>Equipo</span>
+          <strong>
+            ${s.equipment || '-'}
+          </strong>
+        </div>
+
+        <div>
+          <span>Promoción</span>
+          <strong>
+            ${s.bonus || '-'}
+          </strong>
+        </div>
+
+        <div>
+          <span>Fecha</span>
+          <strong>
+            ${formatDate(s.createdAt)}
+          </strong>
+        </div>
+
+        <div>
+          <span>Ciudad</span>
+          <strong>
+            ${s.city || '-'}
+          </strong>
+        </div>
       </div>
 
       <div class="sale-card-mobile-actions">
-        <button class="btn btn-outline" onclick="viewSurveyDetail(${s.id})">Ver</button>
-        ${s.status === 'pending'
-          ? `<button class="btn btn-secondary" onclick="editSurvey(${s.id})">Editar</button>`
-          : ''
+        <button
+          class="btn btn-outline"
+          onclick="viewSurveyDetail(${s.id})"
+        >
+          Ver
+        </button>
+
+        ${
+          s.status === 'pending'
+            ? `
+              <button
+                class="btn btn-secondary"
+                onclick="editSurvey(${s.id})"
+              >
+                Editar
+              </button>
+            `
+            : ''
         }
+
+        <button
+          class="btn btn-danger"
+          onclick="deleteSurvey(${s.id})"
+        >
+          Eliminar
+        </button>
       </div>
+
     </div>
   `).join('');
 }
 
+
 function buildAdminSalesCards(sales) {
   if (!sales.length) {
-    return `<div class="empty">No hay ventas para mostrar.</div>`;
+    return `
+      <div class="empty">
+        No hay ventas para mostrar.
+      </div>
+    `;
   }
 
   return sales.map(s => `
     <div class="sale-card-mobile">
+
       <div class="sale-card-mobile-header">
         <div>
-          <div class="sale-card-mobile-title">${s.holderName || '-'}</div>
-          <div class="sale-card-mobile-sub">${s.sellerName || '-'} · ${s.phone1 || '-'}</div>
+          <div class="sale-card-mobile-title">
+            ${s.holderName || '-'}
+          </div>
+
+          <div class="sale-card-mobile-sub">
+            ${s.sellerName || '-'} ·
+            ${s.phone1 || '-'}
+          </div>
         </div>
-        <div>${statusBadge(s.status)}</div>
+
+        <div>
+          ${statusBadge(s.status)}
+        </div>
       </div>
 
       <div class="sale-card-mobile-grid">
-        <div><span>Equipo</span><strong>${s.equipment || '-'}</strong></div>
-        <div><span>Promoción</span><strong>${s.bonus || '-'}</strong></div>
-        <div><span>Fecha</span><strong>${formatDate(s.createdAt)}</strong></div>
-        <div><span>Documentación</span><strong>${s.dniFrontData && s.dniBackData ? 'Completa' : 'Incompleta'}</strong></div>
+        <div>
+          <span>Equipo</span>
+          <strong>
+            ${s.equipment || '-'}
+          </strong>
+        </div>
+
+        <div>
+          <span>Promoción</span>
+          <strong>
+            ${s.bonus || '-'}
+          </strong>
+        </div>
+
+        <div>
+          <span>Fecha</span>
+          <strong>
+            ${formatDate(s.createdAt)}
+          </strong>
+        </div>
+
+        <div>
+          <span>Documentación</span>
+          <strong>
+            ${
+              s.dniFrontData && s.dniBackData
+                ? 'Completa'
+                : 'Incompleta'
+            }
+          </strong>
+        </div>
       </div>
 
       <div class="sale-card-mobile-actions">
-        <button class="btn btn-outline" onclick="viewSurveyDetail(${s.id})">Ver</button>
-        <button class="btn btn-secondary" onclick="changeSurveyStatus(${s.id})">Estado</button>
+        <button
+          class="btn btn-outline"
+          onclick="viewSurveyDetail(${s.id})"
+        >
+          Ver
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          onclick="changeSurveyStatus(${s.id})"
+        >
+          Estado
+        </button>
+
+        <button
+          class="btn btn-danger"
+          onclick="deleteSurvey(${s.id})"
+        >
+          Eliminar
+        </button>
       </div>
+
     </div>
   `).join('');
 }
@@ -1973,7 +2167,13 @@ function renderSurveyForm(user, survey = null) {
 
               <div class="btn-row" style="margin-top:16px;">
                 <button class="btn btn-secondary" type="button" id="cancelSurveyBtn">Cancelar</button>
-                <button class="btn btn-primary" type="submit">${survey ? 'Guardar cambios' : 'Guardar encuesta'}</button>
+                <button
+                  class="btn btn-primary"
+                  type="submit"
+                  id="saveSurveyBtn"
+                >
+                  ${survey ? 'Guardar cambios' : 'Guardar encuesta'}
+                </button>
               </div>
 
               <div id="surveyMsg" style="margin-top:16px;"></div>
@@ -1993,6 +2193,19 @@ function renderSurveyForm(user, survey = null) {
 
   form.onsubmit = async (e) => {
     e.preventDefault();
+
+    const saveSurveyBtn = document.getElementById(
+  'saveSurveyBtn'
+);
+
+if (saveSurveyBtn.disabled) {
+  return;
+}
+
+saveSurveyBtn.disabled = true;
+saveSurveyBtn.textContent = survey
+  ? 'Guardando cambios...'
+  : 'Guardando venta...';
 
     const formData = new FormData(e.target);
     const body = Object.fromEntries(formData);
@@ -2031,9 +2244,16 @@ function renderSurveyForm(user, survey = null) {
     const response = await res.json();
 
     if (!res.ok) {
-      document.getElementById('surveyMsg').innerHTML = `<p style="color:#dc2626;">${response.error}</p>`;
-      return;
-    }
+  document.getElementById('surveyMsg').innerHTML =
+    `<p style="color:#dc2626;">${response.error}</p>`;
+
+  saveSurveyBtn.disabled = false;
+  saveSurveyBtn.textContent = survey
+    ? 'Guardar cambios'
+    : 'Guardar encuesta';
+
+  return;
+}
 
     document.getElementById('surveyMsg').innerHTML = `<p style="color:#16a34a;">${response.message}</p>`;
 
@@ -4159,6 +4379,58 @@ window.editSurvey = async function(id) {
   }
 
   renderSurveyForm(user, survey);
+};
+
+window.deleteSurvey = async function(id) {
+  const user = getSession();
+
+  if (!user) {
+    renderHome();
+    return;
+  }
+
+  const confirmed = confirm(
+    '¿Seguro que querés eliminar esta venta?\n\n' +
+    'Esta acción no se puede deshacer.'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `/api/surveys/${id}`,
+      {
+        method: 'DELETE'
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(
+        data.error ||
+        'No se pudo eliminar la venta'
+      );
+      return;
+    }
+
+    alert('Venta eliminada correctamente');
+
+    if (user.role === 'admin') {
+      renderAdminSurveys();
+    } else {
+      renderSellerSurveys(user);
+    }
+
+  } catch (error) {
+    console.error(error);
+
+    alert(
+      'Ocurrió un error al eliminar la venta'
+    );
+  }
 };
 
 window.viewSurveyDetail = async function(id) {

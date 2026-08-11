@@ -1006,6 +1006,41 @@ if (
         }
       }
 
+      const now = Date.now();
+
+const duplicateSurvey = surveys.find(survey => {
+  const createdAt = new Date(
+    survey.createdAt
+  ).getTime();
+
+  const isRecent =
+    Number.isFinite(createdAt) &&
+    now - createdAt < 2 * 60 * 1000;
+
+  return (
+    Number(survey.sellerId) ===
+      Number(body.sellerId) &&
+
+    String(survey.cuil || '').trim() ===
+      String(body.cuil || '').trim() &&
+
+    String(survey.monitoringAddress || '').trim().toLowerCase() ===
+      String(body.monitoringAddress || '').trim().toLowerCase() &&
+
+    String(survey.equipment || '').trim().toLowerCase() ===
+      String(body.equipment || '').trim().toLowerCase() &&
+
+    isRecent
+  );
+});
+
+if (duplicateSurvey) {
+  return sendJson(res, 409, {
+    error:
+      'Esta venta ya fue registrada hace unos instantes. Revisá Mis Ventas antes de volver a cargarla.'
+  });
+}
+
       const newSurvey = {
         id: surveys.length ? Math.max(...surveys.map(s => s.id)) + 1 : 1,
         sellerId: body.sellerId,
@@ -1112,6 +1147,44 @@ saveSurveys(surveys);
 
       return sendJson(res, 200, { message: 'Encuesta actualizada correctamente' });
     }
+
+    if (
+  req.url.startsWith('/api/surveys/') &&
+  req.method === 'DELETE'
+) {
+  const surveys = loadSurveys();
+
+  const id = Number(
+    req.url.split('/').pop()
+  );
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return sendJson(res, 400, {
+      error: 'ID de venta inválido'
+    });
+  }
+
+  const surveyIndex = surveys.findIndex(
+    survey => Number(survey.id) === id
+  );
+
+  if (surveyIndex === -1) {
+    return sendJson(res, 404, {
+      error: 'Venta no encontrada'
+    });
+  }
+
+  const deletedSurvey = surveys[surveyIndex];
+
+  surveys.splice(surveyIndex, 1);
+
+  saveSurveys(surveys);
+
+  return sendJson(res, 200, {
+    message: 'Venta eliminada correctamente',
+    deletedSurveyId: deletedSurvey.id
+  });
+}
 
     let filePath = req.url === '/' ? '/index.html' : req.url;
     filePath = path.join(PUBLIC_DIR, filePath);
