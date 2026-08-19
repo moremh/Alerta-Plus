@@ -3123,7 +3123,7 @@ async function fetchPotentialClientsForUser(user) {
     : [];
 }
 
-function buildPotentialClientRows(clients, user) {
+function buildPotentialClientRows(clients, user, showSoldAction = false) {
   const isAdmin = user.role === 'admin';
   const columnCount = isAdmin ? 7 : 6;
 
@@ -3212,13 +3212,35 @@ function buildPotentialClientRows(clients, user) {
           >
             Editar
           </button>
+
+          ${
+            showSoldAction
+              ? client.sold
+                ? `
+                  <button
+                    class="btn btn-secondary"
+                    onclick="setPotentialClientSold(${client.id}, false)"
+                  >
+                    Quitar vendido
+                  </button>
+                `
+                : `
+                  <button
+                    class="btn btn-primary"
+                    onclick="setPotentialClientSold(${client.id}, true)"
+                  >
+                    Marcar vendido
+                  </button>
+                `
+              : ''
+          }
         </div>
       </td>
     </tr>
   `).join('');
 }
 
-function buildPotentialClientCards(clients, user) {
+function buildPotentialClientCards(clients, user, showSoldAction = false) {
   const isAdmin = user.role === 'admin';
 
   if (!clients.length) {
@@ -3303,6 +3325,28 @@ function buildPotentialClientCards(clients, user) {
         >
           Editar
         </button>
+
+        ${
+          showSoldAction
+            ? client.sold
+              ? `
+                <button
+                  class="btn btn-secondary"
+                  onclick="setPotentialClientSold(${client.id}, false)"
+                >
+                  Quitar vendido
+                </button>
+              `
+              : `
+                <button
+                  class="btn btn-primary"
+                  onclick="setPotentialClientSold(${client.id}, true)"
+                >
+                  Marcar vendido
+                </button>
+              `
+            : ''
+        }
       </div>
     </div>
   `).join('');
@@ -3621,7 +3665,8 @@ async function renderPotentialClients(user) {
                 <tbody id="potentialClientsTableBody">
                   ${buildPotentialClientRows(
                     filtered,
-                    user
+                    user,
+                    true
                   )}
                 </tbody>
               </table>
@@ -3633,7 +3678,8 @@ async function renderPotentialClients(user) {
             >
               ${buildPotentialClientCards(
                 filtered,
-                user
+                user,
+                true
               )}
             </div>
           </div>
@@ -3693,14 +3739,16 @@ if (dashboardButton) {
           'potentialClientsTableBody'
         ).innerHTML = buildPotentialClientRows(
           filteredNow,
-          user
+          user,
+          true
         );
 
         document.getElementById(
           'potentialClientsCards'
         ).innerHTML = buildPotentialClientCards(
           filteredNow,
-          user
+          user,
+          true
         );
       };
 
@@ -4407,6 +4455,82 @@ window.deletePotentialFollowUp = async function(
 
     showAppMessage(
       'No se pudo eliminar la observación'
+    );
+  }
+};
+
+window.setPotentialClientSold = async function(id, sold) {
+  const user = getSession();
+
+  if (!user) {
+    renderHome();
+    return;
+  }
+
+  const nextSold = Boolean(sold);
+
+  const confirmed = await showAppConfirm(
+    nextSold
+      ? '¿Querés marcar este cliente potencial como vendido?'
+      : '¿Querés quitar la marca de vendido de este cliente?',
+    {
+      title: nextSold
+        ? 'Marcar como vendido'
+        : 'Quitar vendido',
+      confirmText: nextSold
+        ? 'Marcar vendido'
+        : 'Quitar vendido'
+    }
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `/api/potential-clients/${id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sold: nextSold,
+          requesterId: user.id,
+          requesterRole: user.role
+        })
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      showAppMessage(
+        data.error ||
+        'No se pudo actualizar el estado del cliente'
+      );
+      return;
+    }
+
+    await showAppMessage(
+      nextSold
+        ? 'Cliente marcado como vendido correctamente'
+        : 'Se quitó la marca de vendido correctamente',
+      {
+        tone: 'success'
+      }
+    );
+
+    renderPotentialClients(user);
+  } catch (error) {
+    console.error(
+      'Error actualizando estado vendido:',
+      error
+    );
+
+    showAppMessage(
+      'No se pudo actualizar el estado del cliente'
     );
   }
 };

@@ -1119,6 +1119,42 @@ if (
     potentialClient.interestLevel = interestLevel;
   }
 
+  if (body.sold !== undefined) {
+    const nextSold = body.sold === true;
+
+    if (!nextSold) {
+      const surveys = loadSurveys();
+
+      const linkedSurvey = surveys.find(
+        survey =>
+          Number(survey.potentialClientId) ===
+          Number(potentialClient.id)
+      );
+
+      if (linkedSurvey) {
+        return sendJson(res, 409, {
+          error:
+            'Este cliente está vinculado a una venta y no se puede quitar la marca de vendido manualmente'
+        });
+      }
+    }
+
+    potentialClient.sold = nextSold;
+
+    if (nextSold) {
+      potentialClient.soldAt =
+        potentialClient.soldAt ||
+        new Date().toISOString();
+
+      if (!potentialClient.soldSurveyId) {
+        potentialClient.soldSurveyId = null;
+      }
+    } else {
+      potentialClient.soldAt = null;
+      potentialClient.soldSurveyId = null;
+    }
+  }
+
   if (body.observations !== undefined) {
     potentialClient.observations = String(
       body.observations || ''
