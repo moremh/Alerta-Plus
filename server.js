@@ -117,6 +117,21 @@ function loadPotentialClients() {
       client.updatedAt = client.createdAt;
       changed = true;
     }
+
+    if (client.sold === undefined) {
+      client.sold = false;
+      changed = true;
+    }
+
+    if (client.soldAt === undefined) {
+      client.soldAt = null;
+      changed = true;
+    }
+
+    if (client.soldSurveyId === undefined) {
+      client.soldSurveyId = null;
+      changed = true;
+    }
   }
 
   if (changed) {
@@ -719,6 +734,10 @@ if (
 
     followUps: [],
 
+    sold: false,
+    soldAt: null,
+    soldSurveyId: null,
+
     createdAt: now,
     updatedAt: now
   };
@@ -811,6 +830,174 @@ if (
   return sendJson(res, 201, {
     message: 'Avance agregado correctamente',
     followUp: newFollowUp,
+    potentialClient
+  });
+}
+
+/*
+  Editar o eliminar un avance de seguimiento
+*/
+const potentialFollowUpItemMatch = new URL(
+  req.url,
+  `http://${req.headers.host}`
+).pathname.match(
+  /^\/api\/potential-clients\/(\d+)\/follow-ups\/(\d+)$/
+);
+
+if (
+  potentialFollowUpItemMatch &&
+  req.method === 'PATCH'
+) {
+  const potentialClients = loadPotentialClients();
+  const clientId = Number(potentialFollowUpItemMatch[1]);
+  const followUpId = Number(potentialFollowUpItemMatch[2]);
+  const body = await readBody(req);
+
+  const potentialClient = potentialClients.find(
+    client => Number(client.id) === clientId
+  );
+
+  if (!potentialClient) {
+    return sendJson(res, 404, {
+      error: 'Cliente potencial no encontrado'
+    });
+  }
+
+  if (!Array.isArray(potentialClient.followUps)) {
+    return sendJson(res, 404, {
+      error: 'Avance no encontrado'
+    });
+  }
+
+  const followUp = potentialClient.followUps.find(
+    item => Number(item.id) === followUpId
+  );
+
+  if (!followUp) {
+    return sendJson(res, 404, {
+      error: 'Avance no encontrado'
+    });
+  }
+
+  const requesterId = Number(body.requesterId || 0);
+  const requesterRole =
+    body.requesterRole === 'admin'
+      ? 'admin'
+      : 'seller';
+
+  const requester = loadUsers().find(
+    user =>
+      Number(user.id) === requesterId &&
+      user.role === requesterRole &&
+      user.active
+  );
+
+  if (!requester) {
+    return sendJson(res, 403, {
+      error: 'Usuario no autorizado'
+    });
+  }
+
+  if (followUp.authorRole !== requester.role) {
+    return sendJson(res, 403, {
+      error:
+        'No tenés permiso para modificar esta observación'
+    });
+  }
+
+  const text = String(body.text || '').trim();
+
+  if (!text) {
+    return sendJson(res, 400, {
+      error: 'La observación no puede quedar vacía'
+    });
+  }
+
+  const now = new Date().toISOString();
+  followUp.text = text;
+  followUp.updatedAt = now;
+  potentialClient.updatedAt = now;
+
+  savePotentialClients(potentialClients);
+
+  return sendJson(res, 200, {
+    message: 'Observación actualizada correctamente',
+    followUp,
+    potentialClient
+  });
+}
+
+if (
+  potentialFollowUpItemMatch &&
+  req.method === 'DELETE'
+) {
+  const potentialClients = loadPotentialClients();
+  const clientId = Number(potentialFollowUpItemMatch[1]);
+  const followUpId = Number(potentialFollowUpItemMatch[2]);
+  const body = await readBody(req);
+
+  const potentialClient = potentialClients.find(
+    client => Number(client.id) === clientId
+  );
+
+  if (!potentialClient) {
+    return sendJson(res, 404, {
+      error: 'Cliente potencial no encontrado'
+    });
+  }
+
+  if (!Array.isArray(potentialClient.followUps)) {
+    return sendJson(res, 404, {
+      error: 'Avance no encontrado'
+    });
+  }
+
+  const followUpIndex = potentialClient.followUps.findIndex(
+    item => Number(item.id) === followUpId
+  );
+
+  if (followUpIndex === -1) {
+    return sendJson(res, 404, {
+      error: 'Avance no encontrado'
+    });
+  }
+
+  const followUp =
+    potentialClient.followUps[followUpIndex];
+
+  const requesterId = Number(body.requesterId || 0);
+  const requesterRole =
+    body.requesterRole === 'admin'
+      ? 'admin'
+      : 'seller';
+
+  const requester = loadUsers().find(
+    user =>
+      Number(user.id) === requesterId &&
+      user.role === requesterRole &&
+      user.active
+  );
+
+  if (!requester) {
+    return sendJson(res, 403, {
+      error: 'Usuario no autorizado'
+    });
+  }
+
+  if (followUp.authorRole !== requester.role) {
+    return sendJson(res, 403, {
+      error:
+        'No tenés permiso para eliminar esta observación'
+    });
+  }
+
+  potentialClient.followUps.splice(followUpIndex, 1);
+  potentialClient.updatedAt = new Date().toISOString();
+
+  savePotentialClients(potentialClients);
+
+  return sendJson(res, 200, {
+    message: 'Observación eliminada correctamente',
     potentialClient
   });
 }
@@ -1041,10 +1228,45 @@ if (duplicateSurvey) {
   });
 }
 
+      const potentialClientId = Number(
+        body.potentialClientId || 0
+      );
+
+      let linkedPotentialClients = null;
+      let linkedPotentialClient = null;
+
+      if (potentialClientId > 0) {
+        linkedPotentialClients = loadPotentialClients();
+
+        linkedPotentialClient = linkedPotentialClients.find(
+          client =>
+            Number(client.id) === potentialClientId &&
+            Number(client.sellerId) === Number(body.sellerId)
+        );
+
+        if (!linkedPotentialClient) {
+          return sendJson(res, 400, {
+            error: 'El cliente potencial seleccionado no es válido'
+          });
+        }
+
+        if (linkedPotentialClient.sold) {
+          return sendJson(res, 409, {
+            error: 'El cliente potencial seleccionado ya figura como vendido'
+          });
+        }
+      }
+
       const newSurvey = {
         id: surveys.length ? Math.max(...surveys.map(s => s.id)) + 1 : 1,
         sellerId: body.sellerId,
         sellerName: body.sellerName,
+        potentialClientId: linkedPotentialClient
+          ? Number(linkedPotentialClient.id)
+          : null,
+        potentialClientName: linkedPotentialClient
+          ? linkedPotentialClient.fullNameOrBusinessName
+          : '',
         holderName: body.holderName,
         cuil: body.cuil,
         birthDate: body.birthDate,
@@ -1077,7 +1299,21 @@ if (duplicateSurvey) {
       surveys.push(newSurvey);
       saveSurveys(surveys);
 
-      return sendJson(res, 201, { message: 'Encuesta guardada correctamente' });
+      if (linkedPotentialClient && linkedPotentialClients) {
+        const soldAt = new Date().toISOString();
+
+        linkedPotentialClient.sold = true;
+        linkedPotentialClient.soldAt = soldAt;
+        linkedPotentialClient.soldSurveyId = newSurvey.id;
+        linkedPotentialClient.updatedAt = soldAt;
+
+        savePotentialClients(linkedPotentialClients);
+      }
+
+      return sendJson(res, 201, {
+        message: 'Encuesta guardada correctamente',
+        survey: newSurvey
+      });
     }
 
     if (req.url.startsWith('/api/surveys/') && req.method === 'PATCH') {
@@ -1113,6 +1349,20 @@ if (body.status !== undefined) {
 if (body.adminNotes !== undefined) {
   survey.adminNotes = body.adminNotes;
 }
+
+      if (body.potentialClientId !== undefined) {
+        const nextPotentialClientId = Number(body.potentialClientId || 0);
+
+        survey.potentialClientId = nextPotentialClientId > 0
+          ? nextPotentialClientId
+          : null;
+      }
+
+      if (body.potentialClientName !== undefined) {
+        survey.potentialClientName = String(
+          body.potentialClientName || ''
+        ).trim();
+      }
 
       if (body.holderName !== undefined) survey.holderName = body.holderName;
       if (body.cuil !== undefined) survey.cuil = body.cuil;
@@ -1179,6 +1429,48 @@ saveSurveys(surveys);
   surveys.splice(surveyIndex, 1);
 
   saveSurveys(surveys);
+
+  const deletedPotentialClientId = Number(
+    deletedSurvey.potentialClientId || 0
+  );
+
+  if (deletedPotentialClientId > 0) {
+    const potentialClients = loadPotentialClients();
+    const potentialClient = potentialClients.find(
+      client => Number(client.id) === deletedPotentialClientId
+    );
+
+    if (potentialClient) {
+      const remainingLinkedSurvey = surveys
+        .filter(
+          survey =>
+            Number(survey.potentialClientId) ===
+            deletedPotentialClientId
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt) - new Date(a.createdAt)
+        )[0];
+
+      if (remainingLinkedSurvey) {
+        potentialClient.sold = true;
+        potentialClient.soldAt =
+          remainingLinkedSurvey.createdAt ||
+          new Date().toISOString();
+        potentialClient.soldSurveyId =
+          remainingLinkedSurvey.id;
+      } else {
+        potentialClient.sold = false;
+        potentialClient.soldAt = null;
+        potentialClient.soldSurveyId = null;
+      }
+
+      potentialClient.updatedAt =
+        new Date().toISOString();
+
+      savePotentialClients(potentialClients);
+    }
+  }
 
   return sendJson(res, 200, {
     message: 'Venta eliminada correctamente',

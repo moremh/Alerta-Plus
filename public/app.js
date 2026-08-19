@@ -109,7 +109,11 @@ function interestLevelLabel(level) {
   return labels[level] || 'Sin definir';
 }
 
-function interestLevelText(level) {
+function interestLevelText(level, sold = false) {
+  if (sold) {
+    return 'Vendido';
+  }
+
   const labels = {
     green: 'Interés alto',
     yellow: 'Interés medio',
@@ -119,7 +123,22 @@ function interestLevelText(level) {
   return labels[level] || 'Sin definir';
 }
 
-function interestLevelBadge(level) {
+function interestLevelBadge(level, sold = false) {
+  if (sold) {
+    return `
+      <span
+        class="potential-interest-badge potential-interest-sold"
+        style="
+          background:rgba(37,99,235,0.14);
+          color:#60a5fa;
+          border-color:rgba(59,130,246,0.38);
+        "
+      >
+        Vendido
+      </span>
+    `;
+  }
+
   const safeLevel = ['green', 'yellow', 'red'].includes(level)
     ? level
     : 'red';
@@ -2002,7 +2021,34 @@ function buildSaleSummary(survey, user) {
   `;
 }
 
-function renderSurveyForm(user, survey = null) {
+async function renderSurveyForm(user, survey = null) {
+  let potentialClients = [];
+
+  try {
+    potentialClients = await fetchPotentialClientsForUser(user);
+  } catch (error) {
+    console.error(
+      'Error cargando clientes potenciales para la venta:',
+      error
+    );
+  }
+
+  const selectedPotentialClientId = Number(
+    survey?.potentialClientId || 0
+  );
+
+  const selectablePotentialClients = potentialClients
+    .filter(client =>
+      !client.sold ||
+      Number(client.id) === selectedPotentialClientId
+    )
+    .sort((a, b) =>
+      String(a.fullNameOrBusinessName || '').localeCompare(
+        String(b.fullNameOrBusinessName || ''),
+        'es'
+      )
+    );
+
   renderAppShell({
     user,
     active: 'newSale',
@@ -2016,8 +2062,52 @@ function renderSurveyForm(user, survey = null) {
 
             <div class="grid-2">
               <div class="field">
-                <label>Vendedor (Quién cargó la venta)</label>
-                <input class="input" value="${user.name}" disabled>
+                <label>Cliente potencial / Cuenta (opcional)</label>
+
+                <select
+                  class="select"
+                  id="potentialClientSaleSelect"
+                  name="potentialClientId"
+                  form="surveyForm"
+                  ${survey ? 'disabled' : ''}
+                >
+                  <option value="">
+                    Titular nuevo / No es cliente potencial
+                  </option>
+
+                  ${selectablePotentialClients.map(client => `
+                    <option
+                      value="${client.id}"
+                      ${
+                        Number(client.id) === selectedPotentialClientId
+                          ? 'selected'
+                          : ''
+                      }
+                    >
+                      ${escapePotentialClientHtml(
+                        client.fullNameOrBusinessName || '-'
+                      )}${client.sold ? ' · Vendido' : ''}
+                    </option>
+                  `).join('')}
+                </select>
+
+                ${
+                  survey && selectedPotentialClientId
+                    ? `
+                      <input
+                        type="hidden"
+                        name="potentialClientId"
+                        form="surveyForm"
+                        value="${selectedPotentialClientId}"
+                      >
+                    `
+                    : ''
+                }
+
+                <div class="muted" style="margin-top:8px;">
+                  Al elegir una cuenta se completan los datos disponibles.
+                  El nombre del titular puede modificarse.
+                </div>
               </div>
 
               <div class="field">
@@ -2190,6 +2280,78 @@ function renderSurveyForm(user, survey = null) {
 
   const form = document.getElementById('surveyForm');
   attachSaleSummarySync(form, user.name, survey?.status || 'pending');
+
+  const potentialClientSaleSelect = document.getElementById(
+    'potentialClientSaleSelect'
+  );
+
+  if (potentialClientSaleSelect && !survey) {
+    potentialClientSaleSelect.onchange = () => {
+      const potentialClientId = Number(
+        potentialClientSaleSelect.value || 0
+      );
+
+      const selectedClient = potentialClients.find(
+        client => Number(client.id) === potentialClientId
+      );
+
+      if (!selectedClient) {
+        return;
+      }
+
+      const setFieldValue = (
+        fieldName,
+        value,
+        { onlyIfEmpty = false } = {}
+      ) => {
+        const field = form.elements[fieldName];
+
+        if (!field) {
+          return;
+        }
+
+        if (onlyIfEmpty && String(field.value || '').trim()) {
+          return;
+        }
+
+        field.value = value || '';
+
+        field.dispatchEvent(
+          new Event('input', { bubbles: true })
+        );
+
+        field.dispatchEvent(
+          new Event('change', { bubbles: true })
+        );
+      };
+
+      setFieldValue(
+        'holderName',
+        selectedClient.fullNameOrBusinessName || '',
+        { onlyIfEmpty: true }
+      );
+
+      setFieldValue(
+        'email',
+        selectedClient.email || ''
+      );
+
+      setFieldValue(
+        'phone1',
+        selectedClient.phone || ''
+      );
+
+      setFieldValue(
+        'monitoringAddress',
+        selectedClient.address || ''
+      );
+
+      setFieldValue(
+        'city',
+        selectedClient.city || ''
+      );
+    };
+  }
 
   form.onsubmit = async (e) => {
     e.preventDefault();
@@ -2694,7 +2856,7 @@ function buildPotentialClientRows(clients, user) {
       </td>
 
       <td>
-        ${interestLevelBadge(client.interestLevel)}
+        ${interestLevelBadge(client.interestLevel, client.sold)}
       </td>
 
       <td>
@@ -2751,7 +2913,7 @@ function buildPotentialClientCards(clients, user) {
         </div>
 
         <div>
-          ${interestLevelBadge(client.interestLevel)}
+          ${interestLevelBadge(client.interestLevel, client.sold)}
         </div>
       </div>
 
@@ -2839,9 +3001,14 @@ async function renderPotentialClients(user) {
     function getFilteredClients() {
       let filtered = [...potentialClients];
 
-      if (currentInterest !== 'all') {
+      if (currentInterest === 'sold') {
+        filtered = filtered.filter(
+          client => Boolean(client.sold)
+        );
+      } else if (currentInterest !== 'all') {
         filtered = filtered.filter(
           client =>
+            !client.sold &&
             client.interestLevel === currentInterest
         );
       }
@@ -2894,15 +3061,25 @@ async function renderPotentialClients(user) {
       const filtered = getFilteredClients();
 
       const greenCount = filtered.filter(
-        client => client.interestLevel === 'green'
+        client =>
+          !client.sold &&
+          client.interestLevel === 'green'
       ).length;
 
       const yellowCount = filtered.filter(
-        client => client.interestLevel === 'yellow'
+        client =>
+          !client.sold &&
+          client.interestLevel === 'yellow'
       ).length;
 
       const redCount = filtered.filter(
-        client => client.interestLevel === 'red'
+        client =>
+          !client.sold &&
+          client.interestLevel === 'red'
+      ).length;
+
+      const soldCount = filtered.filter(
+        client => Boolean(client.sold)
       ).length;
 
       renderAppShell({
@@ -2969,6 +3146,14 @@ async function renderPotentialClients(user) {
                 Nivel rojo
               </div>
             </div>
+
+            <div class="stat-card mini-stat-card">
+              <h3>Vendidos</h3>
+              <p class="stat-number">${soldCount}</p>
+              <div class="stat-meta">
+                Clientes convertidos
+              </div>
+            </div>
           </div>
 
           <div class="card">
@@ -3016,6 +3201,17 @@ async function renderPotentialClients(user) {
                   data-potential-interest="red"
                 >
                   Rojos
+                </button>
+
+                <button
+                  class="tab ${
+                    currentInterest === 'sold'
+                      ? 'active'
+                      : ''
+                  }"
+                  data-potential-interest="sold"
+                >
+                  Vendidos
                 </button>
               </div>
 
@@ -3532,8 +3728,24 @@ function closePotentialFollowUpModal() {
   }
 }
 
-function openPotentialFollowUpModal(user, client) {
+function openPotentialFollowUpModal(
+  user,
+  client,
+  followUp = null
+) {
   closePotentialFollowUpModal();
+
+  const isEditing = Boolean(followUp);
+
+  if (
+    isEditing &&
+    followUp.authorRole !== user.role
+  ) {
+    alert(
+      'No tenés permiso para editar esta observación'
+    );
+    return;
+  }
 
   const overlay = document.createElement('div');
 
@@ -3544,7 +3756,9 @@ function openPotentialFollowUpModal(user, client) {
     <div class="modal-card">
       <div class="modal-header">
         <div>
-          <h3>+ Agregar avance</h3>
+          <h3>
+            ${isEditing ? 'Editar avance' : '+ Agregar avance'}
+          </h3>
 
           <p>
             ${escapePotentialClientHtml(
@@ -3571,7 +3785,9 @@ function openPotentialFollowUpModal(user, client) {
             name="text"
             required
             placeholder="Ej: Se realizó una visita y solicitó una nueva propuesta..."
-          ></textarea>
+          >${escapePotentialClientHtml(
+            followUp?.text || ''
+          )}</textarea>
         </div>
 
         <div id="potentialFollowUpMsg"></div>
@@ -3590,7 +3806,11 @@ function openPotentialFollowUpModal(user, client) {
             type="submit"
             id="savePotentialFollowUpBtn"
           >
-            Agregar avance
+            ${
+              isEditing
+                ? 'Guardar cambios'
+                : 'Agregar avance'
+            }
           </button>
         </div>
       </form>
@@ -3624,6 +3844,8 @@ function openPotentialFollowUpModal(user, client) {
     body.authorId = user.id;
     body.authorName = user.name;
     body.authorRole = user.role;
+    body.requesterId = user.id;
+    body.requesterRole = user.role;
 
     const saveButton = document.getElementById(
       'savePotentialFollowUpBtn'
@@ -3634,13 +3856,19 @@ function openPotentialFollowUpModal(user, client) {
     );
 
     saveButton.disabled = true;
-    saveButton.textContent = 'Guardando...';
+    saveButton.textContent = isEditing
+      ? 'Guardando cambios...'
+      : 'Guardando...';
 
     try {
+      const url = isEditing
+        ? `/api/potential-clients/${client.id}/follow-ups/${followUp.id}`
+        : `/api/potential-clients/${client.id}/follow-ups`;
+
       const res = await fetch(
-        `/api/potential-clients/${client.id}/follow-ups`,
+        url,
         {
-          method: 'POST',
+          method: isEditing ? 'PATCH' : 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
@@ -3654,13 +3882,21 @@ function openPotentialFollowUpModal(user, client) {
         messageBox.innerHTML = `
           <p style="color:#dc2626;">
             ${escapePotentialClientHtml(
-              data.error || 'No se pudo agregar el avance'
+              data.error ||
+              (
+                isEditing
+                  ? 'No se pudo editar el avance'
+                  : 'No se pudo agregar el avance'
+              )
             )}
           </p>
         `;
 
         saveButton.disabled = false;
-        saveButton.textContent = 'Agregar avance';
+        saveButton.textContent = isEditing
+          ? 'Guardar cambios'
+          : 'Agregar avance';
+
         return;
       }
 
@@ -3668,21 +3904,176 @@ function openPotentialFollowUpModal(user, client) {
       viewPotentialClient(client.id);
     } catch (error) {
       console.error(
-        'Error agregando avance:',
+        isEditing
+          ? 'Error editando avance:'
+          : 'Error agregando avance:',
         error
       );
 
       messageBox.innerHTML = `
         <p style="color:#dc2626;">
-          No se pudo agregar el avance
+          ${
+            isEditing
+              ? 'No se pudo editar el avance'
+              : 'No se pudo agregar el avance'
+          }
         </p>
       `;
 
       saveButton.disabled = false;
-      saveButton.textContent = 'Agregar avance';
+      saveButton.textContent = isEditing
+        ? 'Guardar cambios'
+        : 'Agregar avance';
     }
   };
 }
+
+window.editPotentialFollowUp = async function(
+  clientId,
+  followUpId
+) {
+  const user = getSession();
+
+  if (!user) {
+    renderHome();
+    return;
+  }
+
+  try {
+    const clients =
+      await fetchPotentialClientsForUser(user);
+
+    const client = clients.find(
+      item => Number(item.id) === Number(clientId)
+    );
+
+    if (!client) {
+      alert('Cliente potencial no encontrado');
+      return;
+    }
+
+    const followUp = Array.isArray(client.followUps)
+      ? client.followUps.find(
+          item =>
+            Number(item.id) === Number(followUpId)
+        )
+      : null;
+
+    if (!followUp) {
+      alert('Observación no encontrada');
+      return;
+    }
+
+    if (followUp.authorRole !== user.role) {
+      alert(
+        'No tenés permiso para editar esta observación'
+      );
+      return;
+    }
+
+    openPotentialFollowUpModal(
+      user,
+      client,
+      followUp
+    );
+  } catch (error) {
+    console.error(
+      'Error buscando el avance:',
+      error
+    );
+
+    alert('No se pudo cargar la observación');
+  }
+};
+
+window.deletePotentialFollowUp = async function(
+  clientId,
+  followUpId
+) {
+  const user = getSession();
+
+  if (!user) {
+    renderHome();
+    return;
+  }
+
+  try {
+    const clients =
+      await fetchPotentialClientsForUser(user);
+
+    const client = clients.find(
+      item => Number(item.id) === Number(clientId)
+    );
+
+    if (!client) {
+      alert('Cliente potencial no encontrado');
+      return;
+    }
+
+    const followUp = Array.isArray(client.followUps)
+      ? client.followUps.find(
+          item =>
+            Number(item.id) === Number(followUpId)
+        )
+      : null;
+
+    if (!followUp) {
+      alert('Observación no encontrada');
+      return;
+    }
+
+    if (followUp.authorRole !== user.role) {
+      alert(
+        'No tenés permiso para eliminar esta observación'
+      );
+      return;
+    }
+
+    const confirmed = confirm(
+      '¿Seguro que querés eliminar esta observación?\n\n' +
+      'Esta acción no se puede deshacer.'
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const res = await fetch(
+      `/api/potential-clients/${clientId}/follow-ups/${followUpId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          requesterId: user.id,
+          requesterRole: user.role
+        })
+      }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(
+        data.error ||
+        'No se pudo eliminar la observación'
+      );
+      return;
+    }
+
+    viewPotentialClient(clientId);
+  } catch (error) {
+    console.error(
+      'Error eliminando observación:',
+      error
+    );
+
+    alert(
+      'No se pudo eliminar la observación'
+    );
+  }
+};
 
 window.editPotentialClient = async function(id) {
   const user = getSession();
@@ -3790,7 +4181,8 @@ window.viewPotentialClient = async function(id) {
 
                 <div style="margin-top:8px;">
                   ${interestLevelBadge(
-                    client.interestLevel
+                    client.interestLevel,
+                    client.sold
                   )}
                 </div>
               </div>
@@ -3852,7 +4244,8 @@ window.viewPotentialClient = async function(id) {
                 <div>Nivel de interés</div>
                 <div>
                   ${interestLevelText(
-                    client.interestLevel
+                    client.interestLevel,
+                    client.sold
                   )}
                 </div>
               </div>
@@ -3935,6 +4328,13 @@ window.viewPotentialClient = async function(id) {
                           ${formatDateTime(
                             followUp.createdAt
                           )}
+                          ${
+                            followUp.updatedAt
+                              ? ` · Editado ${formatDateTime(
+                                  followUp.updatedAt
+                                )}`
+                              : ''
+                          }
                         </span>
                       </div>
 
@@ -3943,6 +4343,33 @@ window.viewPotentialClient = async function(id) {
                           followUp.text || ''
                         ).replace(/\n/g, '<br>')}
                       </div>
+
+                      ${
+                        followUp.authorRole === user.role
+                          ? `
+                            <div
+                              class="btn-row"
+                              style="margin-top:12px;"
+                            >
+                              <button
+                                class="btn btn-outline"
+                                type="button"
+                                onclick="editPotentialFollowUp(${client.id}, ${followUp.id})"
+                              >
+                                Editar
+                              </button>
+
+                              <button
+                                class="btn btn-danger"
+                                type="button"
+                                onclick="deletePotentialFollowUp(${client.id}, ${followUp.id})"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          `
+                          : ''
+                      }
                     </div>
                   </div>
                 `).join('')
