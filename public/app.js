@@ -150,6 +150,338 @@ function interestLevelBadge(level, sold = false) {
   `;
 }
 
+
+let activeAppDialogClose = null;
+
+function ensureAppDialogStyles() {
+  if (document.getElementById('appDialogStyles')) {
+    return;
+  }
+
+  const style = document.createElement('style');
+  style.id = 'appDialogStyles';
+  style.textContent = `
+    body.app-dialog-open {
+      overflow: hidden;
+    }
+
+    .app-dialog-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.62);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      animation: appDialogFadeIn 0.16s ease-out;
+    }
+
+    .app-dialog-card {
+      width: min(100%, 500px);
+      border: 1px solid #d9e2ef;
+      border-radius: 20px;
+      background: #ffffff;
+      color: #0f172a;
+      box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+      overflow: hidden;
+      animation: appDialogPopIn 0.18s ease-out;
+    }
+
+    body[data-theme="dark"] .app-dialog-card {
+      background: #182437;
+      color: #f8fafc;
+      border-color: #334155;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.48);
+    }
+
+    .app-dialog-body {
+      padding: 24px 24px 18px;
+    }
+
+    .app-dialog-heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .app-dialog-icon {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: rgba(37, 99, 235, 0.12);
+      color: #2563eb;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .app-dialog-card[data-tone="success"] .app-dialog-icon {
+      background: rgba(22, 163, 74, 0.12);
+      color: #16a34a;
+    }
+
+    .app-dialog-card[data-tone="danger"] .app-dialog-icon,
+    .app-dialog-card[data-tone="warning"] .app-dialog-icon {
+      background: rgba(220, 38, 38, 0.11);
+      color: #dc2626;
+    }
+
+    .app-dialog-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 800;
+    }
+
+    .app-dialog-message {
+      margin: 0;
+      color: #475569;
+      font-size: 15px;
+      line-height: 1.6;
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+
+    body[data-theme="dark"] .app-dialog-message {
+      color: #cbd5e1;
+    }
+
+    .app-dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 16px 24px 22px;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    body[data-theme="dark"] .app-dialog-actions {
+      border-top-color: #334155;
+    }
+
+    .app-dialog-actions .btn {
+      min-width: 104px;
+    }
+
+    @keyframes appDialogFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes appDialogPopIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .app-dialog-overlay {
+        padding: 14px;
+      }
+
+      .app-dialog-body {
+        padding: 20px 18px 16px;
+      }
+
+      .app-dialog-actions {
+        padding: 14px 18px 18px;
+      }
+
+      .app-dialog-actions .btn {
+        flex: 1;
+      }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function detectAppDialogTone(message) {
+  const normalized = String(message || '').toLowerCase();
+
+  if (
+    normalized.includes('correctamente') ||
+    normalized.includes('guardado') ||
+    normalized.includes('actualizado')
+  ) {
+    return 'success';
+  }
+
+  if (
+    normalized.includes('no se pudo') ||
+    normalized.includes('no tenés permiso') ||
+    normalized.includes('no encontrado') ||
+    normalized.includes('no encontrada') ||
+    normalized.includes('error') ||
+    normalized.includes('solo se pueden')
+  ) {
+    return 'danger';
+  }
+
+  return 'info';
+}
+
+function showAppDialog({
+  title = 'AlertaPlus',
+  message = '',
+  tone = 'info',
+  confirmMode = false,
+  confirmText = 'Aceptar',
+  cancelText = 'Cancelar'
+} = {}) {
+  ensureAppDialogStyles();
+
+  if (activeAppDialogClose) {
+    activeAppDialogClose(false);
+  }
+
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.id = 'appDialogOverlay';
+    overlay.className = 'app-dialog-overlay';
+
+    const card = document.createElement('div');
+    card.className = 'app-dialog-card';
+    card.dataset.tone = tone;
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'appDialogTitle');
+    card.setAttribute('aria-describedby', 'appDialogMessage');
+
+    const icon = tone === 'success'
+      ? '✓'
+      : tone === 'danger' || tone === 'warning'
+        ? '!'
+        : 'i';
+
+    card.innerHTML = `
+      <div class="app-dialog-body">
+        <div class="app-dialog-heading">
+          <div class="app-dialog-icon" aria-hidden="true">${icon}</div>
+          <h3 class="app-dialog-title" id="appDialogTitle"></h3>
+        </div>
+        <p class="app-dialog-message" id="appDialogMessage"></p>
+      </div>
+      <div class="app-dialog-actions"></div>
+    `;
+
+    card.querySelector('#appDialogTitle').textContent = title;
+    card.querySelector('#appDialogMessage').textContent = String(message || '');
+
+    const actions = card.querySelector('.app-dialog-actions');
+
+    if (confirmMode) {
+      const cancelButton = document.createElement('button');
+      cancelButton.type = 'button';
+      cancelButton.className = 'btn btn-secondary';
+      cancelButton.textContent = cancelText;
+      actions.appendChild(cancelButton);
+
+      cancelButton.onclick = () => finish(false);
+    }
+
+    const confirmButton = document.createElement('button');
+    confirmButton.type = 'button';
+    confirmButton.className = confirmMode
+      ? 'btn btn-danger'
+      : 'btn btn-primary';
+    confirmButton.textContent = confirmText;
+    actions.appendChild(confirmButton);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    document.body.classList.add('app-dialog-open');
+
+    let settled = false;
+
+    const onKeyDown = event => {
+      if (event.key === 'Escape') {
+        finish(confirmMode ? false : true);
+      }
+
+      if (
+        event.key === 'Enter' &&
+        document.activeElement !== actions.querySelector('.btn-secondary')
+      ) {
+        finish(true);
+      }
+    };
+
+    function finish(value) {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      window.removeEventListener('keydown', onKeyDown);
+      overlay.remove();
+      document.body.classList.remove('app-dialog-open');
+
+      if (activeAppDialogClose === finish) {
+        activeAppDialogClose = null;
+      }
+
+      resolve(value);
+    }
+
+    activeAppDialogClose = finish;
+
+    confirmButton.onclick = () => finish(true);
+
+    overlay.onclick = event => {
+      if (event.target === overlay) {
+        finish(confirmMode ? false : true);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
+    requestAnimationFrame(() => {
+      confirmButton.focus();
+    });
+  });
+}
+
+function showAppMessage(message, options = {}) {
+  const tone = options.tone || detectAppDialogTone(message);
+
+  const title = options.title || (
+    tone === 'success'
+      ? 'Operación realizada'
+      : tone === 'danger'
+        ? 'Aviso'
+        : 'AlertaPlus'
+  );
+
+  return showAppDialog({
+    title,
+    message,
+    tone,
+    confirmText: options.confirmText || 'Aceptar'
+  });
+}
+
+function showAppConfirm(message, options = {}) {
+  return showAppDialog({
+    title: options.title || 'Confirmar acción',
+    message,
+    tone: options.tone || 'warning',
+    confirmMode: true,
+    confirmText: options.confirmText || 'Aceptar',
+    cancelText: options.cancelText || 'Cancelar'
+  });
+}
+
 function formatDate(value) {
   if (!value) return '-';
   const d = new Date(value);
@@ -2764,7 +3096,7 @@ function renderProfile(user) {
     })
     .catch(error => {
       console.error('Error cargando el perfil:', error);
-      alert('No se pudo cargar la información del perfil');
+      showAppMessage('No se pudo cargar la información del perfil');
     });
 }
 
@@ -3389,7 +3721,7 @@ if (dashboardButton) {
       error
     );
 
-    alert(
+    showAppMessage(
       'No se pudieron cargar los clientes potenciales'
     );
   }
@@ -3741,7 +4073,7 @@ function openPotentialFollowUpModal(
     isEditing &&
     followUp.authorRole !== user.role
   ) {
-    alert(
+    showAppMessage(
       'No tenés permiso para editar esta observación'
     );
     return;
@@ -3948,7 +4280,7 @@ window.editPotentialFollowUp = async function(
     );
 
     if (!client) {
-      alert('Cliente potencial no encontrado');
+      showAppMessage('Cliente potencial no encontrado');
       return;
     }
 
@@ -3960,12 +4292,12 @@ window.editPotentialFollowUp = async function(
       : null;
 
     if (!followUp) {
-      alert('Observación no encontrada');
+      showAppMessage('Observación no encontrada');
       return;
     }
 
     if (followUp.authorRole !== user.role) {
-      alert(
+      showAppMessage(
         'No tenés permiso para editar esta observación'
       );
       return;
@@ -3982,7 +4314,7 @@ window.editPotentialFollowUp = async function(
       error
     );
 
-    alert('No se pudo cargar la observación');
+    showAppMessage('No se pudo cargar la observación');
   }
 };
 
@@ -4006,7 +4338,7 @@ window.deletePotentialFollowUp = async function(
     );
 
     if (!client) {
-      alert('Cliente potencial no encontrado');
+      showAppMessage('Cliente potencial no encontrado');
       return;
     }
 
@@ -4018,20 +4350,24 @@ window.deletePotentialFollowUp = async function(
       : null;
 
     if (!followUp) {
-      alert('Observación no encontrada');
+      showAppMessage('Observación no encontrada');
       return;
     }
 
     if (followUp.authorRole !== user.role) {
-      alert(
+      showAppMessage(
         'No tenés permiso para eliminar esta observación'
       );
       return;
     }
 
-    const confirmed = confirm(
+    const confirmed = await showAppConfirm(
       '¿Seguro que querés eliminar esta observación?\n\n' +
-      'Esta acción no se puede deshacer.'
+      'Esta acción no se puede deshacer.',
+      {
+        title: 'Eliminar observación',
+        confirmText: 'Eliminar'
+      }
     );
 
     if (!confirmed) {
@@ -4055,7 +4391,7 @@ window.deletePotentialFollowUp = async function(
     const data = await res.json();
 
     if (!res.ok) {
-      alert(
+      showAppMessage(
         data.error ||
         'No se pudo eliminar la observación'
       );
@@ -4069,7 +4405,7 @@ window.deletePotentialFollowUp = async function(
       error
     );
 
-    alert(
+    showAppMessage(
       'No se pudo eliminar la observación'
     );
   }
@@ -4092,7 +4428,7 @@ window.editPotentialClient = async function(id) {
     );
 
     if (!client) {
-      alert('Cliente potencial no encontrado');
+      showAppMessage('Cliente potencial no encontrado');
       return;
     }
 
@@ -4103,7 +4439,7 @@ window.editPotentialClient = async function(id) {
       error
     );
 
-    alert('No se pudo cargar el cliente potencial');
+    showAppMessage('No se pudo cargar el cliente potencial');
   }
 };
 
@@ -4124,7 +4460,7 @@ window.viewPotentialClient = async function(id) {
     );
 
     if (!client) {
-      alert('Cliente potencial no encontrado');
+      showAppMessage('Cliente potencial no encontrado');
       return;
     }
 
@@ -4413,7 +4749,7 @@ window.viewPotentialClient = async function(id) {
       error
     );
 
-    alert(
+    showAppMessage(
       'No se pudo cargar el cliente potencial'
     );
   }
@@ -4670,7 +5006,7 @@ function openStatusModal({
       saveButton.disabled = false;
       saveButton.textContent = 'Guardar cambios';
 
-      alert('No se pudo guardar el nuevo estado');
+      showAppMessage('No se pudo guardar el nuevo estado');
     }
   };
 }
@@ -4733,7 +5069,7 @@ window.toggleUser = async function(id, currentActive) {
   const data = await res.json();
 
   if (!res.ok) {
-    alert(data.error);
+    showAppMessage(data.error);
     return;
   }
 
@@ -4751,7 +5087,7 @@ window.changeSurveyStatus = async function(id) {
   const survey = surveyData.surveys.find(s => s.id === id);
 
   if (!survey) {
-    alert('Encuesta no encontrada');
+    showAppMessage('Encuesta no encontrada');
     return;
   }
 
@@ -4777,7 +5113,7 @@ window.changeSurveyStatus = async function(id) {
       if (!res.ok) {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Guardar cambios';
-        alert(response.error);
+        showAppMessage(response.error);
         return;
       }
 
@@ -4796,12 +5132,12 @@ window.editSurvey = async function(id) {
   const survey = data.surveys.find(s => s.id === id && s.sellerId === user.id);
 
   if (!survey) {
-    alert('Encuesta no encontrada');
+    showAppMessage('Encuesta no encontrada');
     return;
   }
 
   if (survey.status !== 'pending') {
-    alert('Solo se pueden editar encuestas pendientes');
+    showAppMessage('Solo se pueden editar encuestas pendientes');
     return;
   }
 
@@ -4816,9 +5152,13 @@ window.deleteSurvey = async function(id) {
     return;
   }
 
-  const confirmed = confirm(
+  const confirmed = await showAppConfirm(
     '¿Seguro que querés eliminar esta venta?\n\n' +
-    'Esta acción no se puede deshacer.'
+    'Esta acción no se puede deshacer.',
+    {
+      title: 'Eliminar venta',
+      confirmText: 'Eliminar'
+    }
   );
 
   if (!confirmed) {
@@ -4836,14 +5176,14 @@ window.deleteSurvey = async function(id) {
     const data = await res.json();
 
     if (!res.ok) {
-      alert(
+      showAppMessage(
         data.error ||
         'No se pudo eliminar la venta'
       );
       return;
     }
 
-    alert('Venta eliminada correctamente');
+    showAppMessage('Venta eliminada correctamente');
 
     if (user.role === 'admin') {
       renderAdminSurveys();
@@ -4854,7 +5194,7 @@ window.deleteSurvey = async function(id) {
   } catch (error) {
     console.error(error);
 
-    alert(
+    showAppMessage(
       'Ocurrió un error al eliminar la venta'
     );
   }
@@ -4873,14 +5213,14 @@ window.viewSurveyDetail = async function(id) {
     const data = await res.json();
 
     if (!res.ok) {
-      alert(data.error || 'No se pudo cargar la venta');
+      showAppMessage(data.error || 'No se pudo cargar la venta');
       return;
     }
 
     const survey = data.surveys.find(s => Number(s.id) === Number(id));
 
     if (!survey) {
-      alert('Venta no encontrada');
+      showAppMessage('Venta no encontrada');
       return;
     }
 
@@ -5247,7 +5587,7 @@ window.viewSurveyDetail = async function(id) {
     }
   } catch (error) {
     console.error('Error cargando el detalle de la venta:', error);
-    alert('No se pudo cargar el detalle de la venta');
+    showAppMessage('No se pudo cargar el detalle de la venta');
   }
 };
 
